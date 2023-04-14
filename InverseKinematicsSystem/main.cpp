@@ -7,12 +7,12 @@ struct Node {
 	Node* next = nullptr;
 	Node* prev = nullptr;
 	float radius = 4;
-	float offset = (radius * 2.0);
+	//float offset = (radius * 2.0);
 	float angle = 0;
 	olc::vf2d center;
 	olc::vf2d pointA;
 	olc::vf2d pointB;
-	float length = 15;
+	float length = 10;
 
 	Node(float x, float y, float radius, float angle) {
 		pointA.x = x;
@@ -51,17 +51,12 @@ struct Node {
 	}
 
 	void Follow(Node* node) {
-		olc::vf2d target = olc::vf2d(node->pointB.x, node->pointB.y);
+		olc::vf2d target = olc::vf2d(node->pointA.x, node->pointA.y);
 		Follow(target);
 	}
 
 	void SetPointA(olc::vf2d position) {
 		pointA = position;
-		CalculatePointB();
-	}
-
-	void UpdateNode() {
-		Follow(next);
 		CalculatePointB();
 	}
 };
@@ -138,7 +133,7 @@ class InverseKinematicsSystem : public olc::PixelGameEngine
 	Node* baseNode;
 	Node* grabNode;
 
-	int numNodes = 10;
+	int numNodes = 4;
 
 public:
 	InverseKinematicsSystem()
@@ -150,9 +145,8 @@ public:
 	bool OnUserCreate() override
 	{
 
-		Node* startNode = new Node(basePoint.x, basePoint.y, 3, 90);
+		Node* startNode = new Node(basePoint.x, basePoint.y, 3, 0);
 		Node* secondStartNode = new Node(startNode, 3);
-
 
 		//Add first node to list
 		arm.AddFirst(startNode);
@@ -160,21 +154,17 @@ public:
 			std::cout << "Added Node \n";
 		}
 
-
 		//Add second node to list as we need a reference node to create new nodes from
 		arm.AddLast(secondStartNode);
 		if (arm.size == 2) {
 			std::cout << "Added Second Node \n";
 		}
 
-
 		for (int i = 0; i < numNodes - 2; ++i) {
 			Node newNode = Node((*secondStartNode).prev, 3);
 			arm.AddLast(&newNode);
 			std::cout << "Added New Node " << i << "\n";
 		}
-
-
 
 		return true;
 	}
@@ -197,22 +187,23 @@ public:
 		DrawCircle(grabNode->center, grabNode->radius, olc::WHITE);
 		//DrawCircle(grabNode->pointA, 1, olc::GREEN);
 		//DrawCircle(grabNode->pointB, 1, olc::RED);
-		DrawLine(grabNode->pointA, grabNode->pointB, olc::GREEN);
+		//DrawLine(grabNode->pointA, grabNode->pointB, olc::GREEN);
 
-
-
-
+		DrawCircle(GetMouseX(), GetMouseY(), 3,olc::YELLOW);
+		DrawLine(grabNode->center, GetMousePos(), olc::GREEN);
 		
-		//baseNode->Follow(grabNode);
-		//baseNode->CalculatePointB();
-		//baseNode->CalculateCenter();
+		//baseNode->Follow(baseNode->next);
+		baseNode->CalculatePointB();
+		baseNode->CalculateCenter();
 
-		//DrawCircle(baseNode->center, baseNode->radius, olc::BLUE);
+		DrawCircle(baseNode->center, baseNode->radius + 2, olc::BLUE);
+		DrawLine(baseNode->center, baseNode->next->center);
+		//DrawLine(baseNode->pointA, baseNode->pointB, olc::GREEN);
 		//DrawCircle(baseNode->pointA, 1, olc::GREEN);
 		//DrawCircle(baseNode->pointB, 1, olc::RED);
 		//DrawLine(baseNode->pointA, baseNode->pointB, olc::RED);
 
-		Node* backCurrent = baseNode;
+		Node* current = baseNode;
 
 		//for (int i = numNodes - 1; i >= 0; --i) {
 
@@ -231,45 +222,22 @@ public:
 		//	
 		//}
 
-		while (backCurrent->next != nullptr) {
+		while (current->next != nullptr) {
 
-			std::cout << "Looping " << "\n";
+			current->Follow(current->next);
+			current->CalculatePointB();
+			current->CalculateCenter();
 
-			backCurrent->Follow(backCurrent->next);
-			backCurrent->CalculatePointB();
-			backCurrent->CalculateCenter();
-
-			DrawCircle(backCurrent->center, 3, olc::WHITE);
+			DrawCircle(current->center, 3, olc::WHITE);
+			//DrawLine(current->pointA, current->pointB, olc::GREEN);
+			DrawLine(current->center, current->next->center, olc::GREEN);
 
 			//Draw pointA and pointB
-			DrawCircle(backCurrent->pointA, 1, olc::GREEN);
-			DrawCircle(backCurrent->pointB, 1, olc::RED);
+			//DrawCircle(current->pointA, 1, olc::GREEN);
+			//DrawCircle(current->pointB, 1, olc::RED);
 
-			backCurrent = backCurrent->next;
+			current = current->next;
 		}
-
-		/*Node* cur = (*baseNode).prev;
-
-		for (int i = numNodes; i >= 0; --i) {
-			cur->Follow(cur->next);
-			cur->CalculatePointB();
-			cur->CalculateCenter();
-
-			DrawCircle(cur->center, 10, olc::WHITE);
-			DrawCircle(cur->pointA, 2, olc::YELLOW);
-			DrawCircle(cur->pointB, 2, olc::RED);
-
-			cur = cur->next;
-
-		}*/
-
-		/*Node* forwardCurrent = baseNode;
-		for (int i = 1; i < numNodes - 1; ++i) {
-
-			forwardCurrent->SetPointA(forwardCurrent->next);
-
-			forwardCurrent = forwardCurrent->next;
-		}*/
 
 		//baseNode->SetPointA(basePoint);
 		//baseNode->pointA = olc::vf2d(basePoint.x, basePoint.y);
