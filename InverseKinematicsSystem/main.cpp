@@ -234,20 +234,19 @@ public:
 		grabNode->Follow(olc::vf2d(GetMouseX(), GetMouseY()));
 		grabNode->CalculatePointB();
 		grabNode->CalculateCenter();
-		grabNode->SetPointA(grabNode->prev->pointB);
 
 		DrawCircle(grabNode->center, grabNode->radius, olc::RED);
 
-		DrawCircle(GetMouseX(), GetMouseY(), 3.0, olc::YELLOW);
-		DrawLine(grabNode->center, GetMousePos(), olc::GREEN);
-		//DrawLine(grabNode->center, grabNode->prev->center);
+		DrawCircle(GetMouseX(), GetMouseY(), 2.0, olc::YELLOW);
+		//DrawLine(grabNode->center, GetMousePos(), olc::GREEN);
+		DrawLine(grabNode->pointA, grabNode->pointB, olc::BLUE);
 		
 		baseNode->Follow(baseNode->next);
 		baseNode->CalculatePointB();
 		baseNode->CalculateCenter();
 
 		DrawCircle(baseNode->center, baseNode->radius, olc::BLUE);
-		DrawLine(baseNode->center, baseNode->next->center, olc::GREEN);
+		DrawLine(baseNode->pointA, baseNode->pointB, olc::RED);
 
 		/*Node* current = grabNode;
 
@@ -268,20 +267,21 @@ public:
 
 		// Attempt at while loop solution, definitely the closest I have gotten
 
-		Node* current = grabNode;
+		Node* current = baseNode->next;
 
-		while (current != baseNode) {
+		while (current->next != NULL) {
 
 		
-			current->Follow(current->prev);
+			current->Follow(current->next);
 			current->CalculatePointB();
 			current->CalculateCenter();
 
 			DrawCircle(current->center, 3.0, olc::WHITE);
-			DrawLine(current->center, current->prev->center, olc::GREEN);
+			//DrawLine(current->center, current->prev->center, olc::GREEN);
+			DrawLine(current->pointA, current->pointB, olc::GREEN);
 
 
-			current = current->prev;
+			current = current->next;
 	
 			
 			/*std::cout << iterations << "\n";
@@ -301,7 +301,7 @@ public:
 
 
 
-		baseNode->SetPointA(basePoint);
+		//baseNode->SetPointA(olc::vf2d(320, 360));
 
 		
 		return true;
