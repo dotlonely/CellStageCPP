@@ -1,11 +1,11 @@
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
 
-const float PI = 3.1415926535897932384626433832795028841971693993751058209749445923078164062;
+const float PI = 3.1415926535897932384626433832795028841971693993751058209749445923078164062f;
 
-struct Node {
-	Node* next = 0;
-	Node* prev = 0;
+struct Segment {
+	Segment* next = NULL;
+	Segment* prev = NULL;
 	float radius = 4.0;
 	//float offset = (radius * 2.0);
 	float angle = 1.0;
@@ -13,8 +13,13 @@ struct Node {
 	olc::vf2d pointA = olc::vf2d(1, 1);
 	olc::vf2d pointB = olc::vf2d(1, 1);
 	float length = 10.0;
+	bool hasLegs = false;
+	Segment* legOne = NULL;
+	Segment* legTwo = NULL;
+	float legOneOffset = 10.0f;
+	float legTwoOffset = -10.0f;
 
-	Node(float x, float y, float radius, float angle) {
+	Segment(float x, float y, float radius, float angle) {
 		pointA.x = x;
 		pointA.y = y;
 		this->radius = radius;
@@ -22,7 +27,7 @@ struct Node {
 		CalculatePointB();
 	}
 
-	Node(Node* prev, float radius) {
+	Segment(Segment* prev, float radius) {
 		this->prev = prev;
 		this->radius = radius;
 		pointA = prev->pointB;
@@ -51,7 +56,7 @@ struct Node {
 		pointA = target + dir;
 	}
 
-	void Follow(Node* node) {
+	void Follow(Segment* node) {
 		olc::vf2d target = olc::vf2d(node->pointA.x, node->pointA.y);
 		Follow(target);
 	}
@@ -66,14 +71,42 @@ struct Node {
 		pointA = position;
 		CalculatePointB();
 	}
+
+	void AddLegs() {
+		hasLegs = true;
+		legOne = new Segment(this, 1.0f);
+		legTwo = new Segment(this, 1.0f);
+		legOne->next = this;
+		legTwo->next = this;
+		legOne->prev = NULL;
+		legTwo->prev = NULL;
+		legOne->pointA = this->pointB;
+		legTwo->pointA = this->pointB;
+		legOne->CalculateLegOnePointB();
+		legTwo->CalculateLegTwoPointB();
+	}
+
+	void CalculateLegOnePointB() {
+		float dx = length * std::cos(angle * (PI / 180.0));
+		float dy = length * std::sin(angle * (PI / 180.0));
+		pointB.x = pointA.x - dx + legOneOffset;
+		pointB.y = pointA.y - dy + legOneOffset;
+	}
+
+	void CalculateLegTwoPointB() {
+		float dx = length * std::cos(angle * (PI / 180.0));
+		float dy = length * std::sin(angle * (PI / 180.0));
+		pointB.x = pointA.x - dx + legTwoOffset;
+		pointB.y = pointA.y - dy + legTwoOffset;
+	}
 };
 
-struct Arm{
-	Node* head;
-	Node* tail;
+struct Worm{
+	Segment* head;
+	Segment* tail;
 	int size = 0;
 
-	void AddFirst(Node* node) {
+	void AddFirst(Segment* node) {
 		if (size == 0) {
 			head = node;
 			tail = node;
@@ -94,7 +127,7 @@ struct Arm{
 	}
 
 
-	void AddLast(Node* node) {
+	void AddLast(Segment* node) {
 		if (size == 0) {
 			node->next = NULL;
 			node->prev = NULL;
@@ -127,7 +160,7 @@ struct Arm{
 		
 		int count = 0;
 
-		Node* current = head;
+		Segment* current = head;
 
 		while (current->next != NULL) {
 			current = current->next;
@@ -141,20 +174,29 @@ struct Arm{
 
 class InverseKinematicsSystem : public olc::PixelGameEngine
 {
-	olc::vf2d basePoint = olc::vf2d(320, 320);
 
-	olc::vf2d followPoint = olc::vf2d(320, 130);
+	float fTargetFrameTime = 1.0f / 100.0f; // Virtual FPS of 100fps
+	float fAccumulatedTime = 0.0f;
 
-	Arm arm;
+	olc::vf2d basePoint = olc::vf2d(320.0f, 320.0f);
+
+	olc::vf2d followPoint = olc::vf2d(320.0f, 130.0f);
+
+	Worm arm;
 	
-	Node* baseNode;
-	Node* grabNode;
+	Segment* baseSegment;
+	Segment* grabSegment;
 
 	int numNodes = 5;
+	int numLegs = 2;
 	int maxIterations = 10;
 	int iterations = 0;
 
-	float moveSpeed = .05;
+	float initialVelocity = 100.0f;
+	float acceleration = 9.8f;
+	float decceleration = -9.8f;
+	float velocity = 0.0f;
+	float maxVelocity = 10.0f;
 
 public:
 	InverseKinematicsSystem()
@@ -165,106 +207,90 @@ public:
 public:
 	bool OnUserCreate() override
 	{
-		Node* startNode = new Node(basePoint.x, basePoint.y, 2.0, 0.0);
-		Node* secondNode = new Node(startNode, 3.0);
-		Node* thirdNode = new Node(secondNode, 4.0);
-		Node* fourthNode = new Node(thirdNode, 5.0);
-		Node* fifthNode = new Node(fourthNode, 3.0);
+		Segment* startNode = new Segment(basePoint.x, basePoint.y, 2.0, 0.0);
+		Segment* secondNode = new Segment(startNode, 3.0);
+		Segment* thirdNode = new Segment(secondNode, 4.0);
+		Segment* fourthNode = new Segment(thirdNode, 5.0);
+		Segment* fifthNode = new Segment(fourthNode, 3.0);
 
-		//Add first node to list
+		//Add first segment to list
 		arm.AddFirst(startNode);
 		if (arm.size == 1) {
-			std::cout << "Added Node \n";
+			std::cout << "Added Segment \n";
 		}
 
-		//Add second node to list as we need a reference node to create new nodes from
+		//Add second segment to list as we need a reference segment to create new nodes from
 		arm.AddLast(secondNode);
 		if (arm.size == 2) {
-			std::cout << "Added Second Node \n";
+			std::cout << "Added Second Segment \n";
 		}
 
 		arm.AddLast(thirdNode);
 		if (arm.size == 3) {
-			std::cout << "Added Third Node \n";
+			std::cout << "Added Third Segment \n";
 		}
 		
 		arm.AddLast(fourthNode);
 		if (arm.size == 4) {
-			std::cout << "Added Fourth Node \n";
+			std::cout << "Added Fourth Segment \n";
 		}
 		
 		arm.AddLast(fifthNode);
 		if (arm.size == 5) {
-			std::cout << "Added Fifth Node \n";
+			std::cout << "Added Fifth Segment \n";
 		}
 
-		// Problem might stem from all added nodes having to initially reference the same node
-		// when populating list ( Update: when adding them all individually they all get drawn to screen ) 
-		// So this loop was causing an issue as they all had the same prev node reference.
-
-		/*for (int i = 0; i < numNodes - 2; ++i) {
-			Node newNode = Node((*secondStartNode).prev, 3.0);
-			newNode.radius += i;
-			arm.AddLast(&newNode);
-			std::cout << "Added New Node " << i << "\n";
-		}*/
+		fourthNode->AddLegs();
 	
-
 		return true;
 	}
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
+
+		//Handles framerate locking
+		fAccumulatedTime += fElapsedTime;
+		if (fAccumulatedTime >= fTargetFrameTime)
+		{
+			fAccumulatedTime -= fTargetFrameTime;
+			fElapsedTime = fTargetFrameTime;
+		}
+		else
+			return true;
+
+
 		Clear(olc::BLACK);
 
-		if (GetKey(olc::Key::W).bHeld) {
-			followPoint.y -= moveSpeed;
-		}
-		
-		if (GetKey(olc::Key::S).bHeld) {
-			followPoint.y += moveSpeed;
-		}
 
-		if (GetKey(olc::Key::A).bHeld) {
-			followPoint.x -= moveSpeed;
-		}
-		
-		if (GetKey(olc::Key::D).bHeld) {
-			followPoint.x += moveSpeed;
-		}
+		//Handle player input
+		Input(fElapsedTime);
+
 
 		//Set first and last references every update
-		baseNode = arm.head;
-		//baseNode->prev = NULL;
-		grabNode = arm.tail;
-		//grabNode->next = NULL;
+		baseSegment = arm.head;
+		baseSegment->prev = NULL;
+		grabSegment = arm.tail;
+		grabSegment->next = NULL;
 
-		grabNode->Follow(followPoint);
-		grabNode->CalculatePointB();
-		grabNode->CalculateCenter();
+		grabSegment->Follow(followPoint);
+		grabSegment->CalculatePointB();
+		grabSegment->CalculateCenter();
 
 		DrawCircle(followPoint.x, followPoint.y, 1.0, olc::YELLOW);
-		//DrawLine(grabNode->pointA, GetMousePos(), olc::WHITE);
-		//DrawLine(grabNode->pointB, GetMousePos());
-		DrawCircle(grabNode->pointA, 1, olc::RED);
-		DrawCircle(grabNode->pointB, 1, olc::BLUE);
-		DrawCircle(grabNode->center, grabNode->radius, olc::WHITE);
+		DrawCircle(grabSegment->pointA, 1, olc::RED);
+		DrawCircle(grabSegment->pointB, 1, olc::BLUE);
+		DrawCircle(grabSegment->center, grabSegment->radius, olc::WHITE);
 		
-		baseNode->Follow();
-		baseNode->CalculatePointB();
-		baseNode->CalculateCenter();
+		baseSegment->Follow();
+		baseSegment->CalculatePointB();
+		baseSegment->CalculateCenter();
 
-		DrawCircle(baseNode->pointA, 1, olc::RED);
-		DrawCircle(baseNode->pointB, 1, olc::BLUE);
-		DrawCircle(baseNode->center, baseNode->radius, olc::WHITE);
+		DrawCircle(baseSegment->pointA, 1, olc::RED);
+		DrawCircle(baseSegment->pointB, 1, olc::BLUE);
+		DrawCircle(baseSegment->center, baseSegment->radius, olc::WHITE);
 
-		//DrawLine(baseNode->pointA, baseNode->next->pointA);
-		//DrawLine(baseNode->pointB, baseNode->next->pointB);
-		//DrawLine(baseNode->center, baseNode->next->center, olc::GREEN);
 
-		// Attempt at while loop solution, definitely the closest I have gotten
-
-		Node* current = baseNode->next;
+		Segment* current = baseSegment->next;
 
 		while (current->next != NULL) {
 
@@ -275,22 +301,61 @@ public:
 
 			DrawCircle(current->pointA, 1, olc::RED);
 			DrawCircle(current->pointB, 1, olc::BLUE);
-			//DrawLine(current->center, current->next->center, olc::GREEN);
-			//DrawLine(current->pointA, current->next->pointA, olc::RED);
-			//DrawLine(current->pointB, current->next->pointB, olc::BLUE);
-			RenderNode(current);
+			RenderSegment(current, olc::WHITE);
+
+			if (current->hasLegs) {
+				current->legOne->Follow();
+				current->legOne->CalculateLegOnePointB();
+				current->legOne->CalculateCenter();
+				RenderSegment(current->legOne, olc::YELLOW);
+				current->legTwo->Follow();
+				current->legTwo->CalculateLegTwoPointB();
+				current->legTwo->CalculateCenter();
+				RenderSegment(current->legTwo, olc::YELLOW);
+			}
 
 			current = current->next;
 		}
 
-
-		//end while loop attempt
 		
 		return true;
 	}
 
-	void RenderNode(Node* node) {
-		DrawCircle(node->center, node->radius, olc::WHITE);
+	void RenderSegment(Segment* segment, olc::Pixel color) {
+		DrawCircle(segment->center, segment->radius, color);
+	}
+
+	void Input(float fElapsedTime) {
+
+		
+		if (GetKey(olc::Key::W).bHeld) {
+			velocity = initialVelocity + acceleration * fElapsedTime;
+			followPoint.y -= velocity * fElapsedTime;
+		}
+
+		if (GetKey(olc::Key::S).bHeld) {
+			velocity = initialVelocity + acceleration * fElapsedTime;
+			followPoint.y += velocity * fElapsedTime;
+		}
+
+		if (GetKey(olc::Key::A).bHeld) {
+			velocity = initialVelocity + acceleration * fElapsedTime;
+			followPoint.x -= velocity * fElapsedTime;
+		}
+
+		if (GetKey(olc::Key::D).bHeld) {
+			velocity = initialVelocity + acceleration * fElapsedTime;
+			followPoint.x += velocity * fElapsedTime;
+		}
+
+		if (velocity > 0.0) {
+			velocity += decceleration * fElapsedTime;
+		}
+		
+	}
+
+	float CalculateVelocity(float currentVelocity, float fElapsedTime) {
+		return currentVelocity + (acceleration * fElapsedTime);
 	}
 };
 
