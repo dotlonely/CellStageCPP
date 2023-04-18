@@ -7,17 +7,11 @@ struct Segment {
 	Segment* next = NULL;
 	Segment* prev = NULL;
 	float radius = 4.0;
-	//float offset = (radius * 2.0);
 	float angle = 1.0;
 	olc::vf2d center = olc::vf2d(100, 100);
 	olc::vf2d pointA = olc::vf2d(1, 1);
 	olc::vf2d pointB = olc::vf2d(1, 1);
 	float length = 10.0;
-	bool hasLegs = false;
-	Segment* legOne = NULL;
-	Segment* legTwo = NULL;
-	float legOneOffset = 10.0f;
-	float legTwoOffset = -10.0f;
 
 	Segment(float x, float y, float radius, float angle) {
 		pointA.x = x;
@@ -72,33 +66,6 @@ struct Segment {
 		CalculatePointB();
 	}
 
-	void AddLegs() {
-		hasLegs = true;
-		legOne = new Segment(this, 1.0f);
-		legTwo = new Segment(this, 1.0f);
-		legOne->next = this;
-		legTwo->next = this;
-		legOne->prev = NULL;
-		legTwo->prev = NULL;
-		legOne->pointA = this->pointB;
-		legTwo->pointA = this->pointB;
-		legOne->CalculateLegOnePointB();
-		legTwo->CalculateLegTwoPointB();
-	}
-
-	void CalculateLegOnePointB() {
-		float dx = length * std::cos(angle * (PI / 180.0));
-		float dy = length * std::sin(angle * (PI / 180.0));
-		pointB.x = pointA.x - dx + legOneOffset;
-		pointB.y = pointA.y - dy + legOneOffset;
-	}
-
-	void CalculateLegTwoPointB() {
-		float dx = length * std::cos(angle * (PI / 180.0));
-		float dy = length * std::sin(angle * (PI / 180.0));
-		pointB.x = pointA.x - dx + legTwoOffset;
-		pointB.y = pointA.y - dy + legTwoOffset;
-	}
 };
 
 struct Worm{
@@ -177,13 +144,16 @@ class InverseKinematicsSystem : public olc::PixelGameEngine
 
 	float fTargetFrameTime = 1.0f / 100.0f; // Virtual FPS of 100fps
 	float fAccumulatedTime = 0.0f;
+	float nextFollowPointTime = 3.0f;
+	float startTime;
 
 	olc::vf2d basePoint = olc::vf2d(320.0f, 320.0f);
 
-	olc::vf2d followPoint = olc::vf2d(320.0f, 130.0f);
+	olc::vf2d followPoint = olc::vf2d(100,100);
+	olc::vf2d nextFollowPoint;
 
-	Worm arm;
-	
+	Worm worm;
+
 	Segment* baseSegment;
 	Segment* grabSegment;
 
@@ -207,46 +177,28 @@ public:
 public:
 	bool OnUserCreate() override
 	{
+		//Main worm segments
 		Segment* startNode = new Segment(basePoint.x, basePoint.y, 2.0, 0.0);
 		Segment* secondNode = new Segment(startNode, 3.0);
 		Segment* thirdNode = new Segment(secondNode, 4.0);
 		Segment* fourthNode = new Segment(thirdNode, 5.0);
 		Segment* fifthNode = new Segment(fourthNode, 3.0);
 
-		//Add first segment to list
-		arm.AddFirst(startNode);
-		if (arm.size == 1) {
-			std::cout << "Added Segment \n";
-		}
+		//Add segments to list
+		worm.AddFirst(startNode);
+		worm.AddLast(secondNode);
+		worm.AddLast(thirdNode);
+		worm.AddLast(fourthNode);
+		worm.AddLast(fifthNode);
 
-		//Add second segment to list as we need a reference segment to create new nodes from
-		arm.AddLast(secondNode);
-		if (arm.size == 2) {
-			std::cout << "Added Second Segment \n";
-		}
 
-		arm.AddLast(thirdNode);
-		if (arm.size == 3) {
-			std::cout << "Added Third Segment \n";
-		}
-		
-		arm.AddLast(fourthNode);
-		if (arm.size == 4) {
-			std::cout << "Added Fourth Segment \n";
-		}
-		
-		arm.AddLast(fifthNode);
-		if (arm.size == 5) {
-			std::cout << "Added Fifth Segment \n";
-		}
-
-		fourthNode->AddLegs();
-	
 		return true;
 	}
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
+
+		startTime += fElapsedTime;
 
 		//Handles framerate locking
 		fAccumulatedTime += fElapsedTime;
@@ -258,106 +210,74 @@ public:
 		else
 			return true;
 
-
+		// Clear screen every frame
 		Clear(olc::BLACK);
-
 
 		//Handle player input
 		Input(fElapsedTime);
 
+		if (startTime >= nextFollowPointTime) {
+			olc::vf2d nextPoint = olc::vf2d(rand() % ScreenWidth(), rand() % ScreenHeight());
+			nextFollowPoint = nextPoint;
+			startTime = 0;
+			std::cout << "Drew next point at" << nextPoint << std::endl;
+		}else{
+			followPoint = followPoint.lerp(nextFollowPoint, fElapsedTime);
+			FillCircle(nextFollowPoint, 2, olc::DARK_GREEN);
+		}
 
-		//Set first and last references every update
-		baseSegment = arm.head;
+		UpdateWorm();
+
+		return true;
+	}
+
+
+	// Draws specific segments circle
+	void RenderSegment(Segment* segment, olc::Pixel color) {
+		FillCircle(segment->center, segment->radius, color);
+	}
+
+	// Handles User Input, called before any rendering is done
+	void Input(float fElapsedTime) {
+
+
+	}
+
+	void UpdateWorm() 
+	{
+		baseSegment = worm.head;
 		baseSegment->prev = NULL;
-		grabSegment = arm.tail;
+		grabSegment = worm.tail;
 		grabSegment->next = NULL;
 
 		grabSegment->Follow(followPoint);
 		grabSegment->CalculatePointB();
 		grabSegment->CalculateCenter();
 
-		DrawCircle(followPoint.x, followPoint.y, 1.0, olc::YELLOW);
-		DrawCircle(grabSegment->pointA, 1, olc::RED);
-		DrawCircle(grabSegment->pointB, 1, olc::BLUE);
-		DrawCircle(grabSegment->center, grabSegment->radius, olc::WHITE);
-		
+		FillCircle(grabSegment->center, grabSegment->radius, olc::WHITE);
+
 		baseSegment->Follow();
 		baseSegment->CalculatePointB();
 		baseSegment->CalculateCenter();
 
-		DrawCircle(baseSegment->pointA, 1, olc::RED);
-		DrawCircle(baseSegment->pointB, 1, olc::BLUE);
-		DrawCircle(baseSegment->center, baseSegment->radius, olc::WHITE);
+		FillCircle(baseSegment->center, baseSegment->radius, olc::WHITE);
 
 
 		Segment* current = baseSegment->next;
 
 		while (current->next != NULL) {
 
-		
 			current->Follow();
 			current->CalculatePointB();
 			current->CalculateCenter();
 
-			DrawCircle(current->pointA, 1, olc::RED);
-			DrawCircle(current->pointB, 1, olc::BLUE);
 			RenderSegment(current, olc::WHITE);
-
-			if (current->hasLegs) {
-				current->legOne->Follow();
-				current->legOne->CalculateLegOnePointB();
-				current->legOne->CalculateCenter();
-				RenderSegment(current->legOne, olc::YELLOW);
-				current->legTwo->Follow();
-				current->legTwo->CalculateLegTwoPointB();
-				current->legTwo->CalculateCenter();
-				RenderSegment(current->legTwo, olc::YELLOW);
-			}
 
 			current = current->next;
 		}
-
-		
-		return true;
-	}
-
-	void RenderSegment(Segment* segment, olc::Pixel color) {
-		DrawCircle(segment->center, segment->radius, color);
-	}
-
-	void Input(float fElapsedTime) {
-
-		
-		if (GetKey(olc::Key::W).bHeld) {
-			velocity = initialVelocity + acceleration * fElapsedTime;
-			followPoint.y -= velocity * fElapsedTime;
-		}
-
-		if (GetKey(olc::Key::S).bHeld) {
-			velocity = initialVelocity + acceleration * fElapsedTime;
-			followPoint.y += velocity * fElapsedTime;
-		}
-
-		if (GetKey(olc::Key::A).bHeld) {
-			velocity = initialVelocity + acceleration * fElapsedTime;
-			followPoint.x -= velocity * fElapsedTime;
-		}
-
-		if (GetKey(olc::Key::D).bHeld) {
-			velocity = initialVelocity + acceleration * fElapsedTime;
-			followPoint.x += velocity * fElapsedTime;
-		}
-
-		if (velocity > 0.0) {
-			velocity += decceleration * fElapsedTime;
-		}
-		
-	}
-
-	float CalculateVelocity(float currentVelocity, float fElapsedTime) {
-		return currentVelocity + (acceleration * fElapsedTime);
 	}
 };
+
 
 int main()
 {
