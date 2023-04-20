@@ -8,10 +8,10 @@ struct Segment {
 	Segment* prev = NULL;
 	float radius = 4.0;
 	float angle = 1.0;
-	olc::vf2d center = olc::vf2d(100, 100);
+	olc::vf2d center = olc::vf2d(1, 1);
 	olc::vf2d pointA = olc::vf2d(1, 1);
 	olc::vf2d pointB = olc::vf2d(1, 1);
-	float length = 10.0;
+	float length = 5.0;
 
 	Segment(float x, float y, float radius, float angle) {
 		pointA.x = x;
@@ -26,9 +26,7 @@ struct Segment {
 		this->radius = radius;
 		pointA = prev->pointB;
 		CalculatePointB();
-
 	}
-
 
 	void CalculatePointB() {
 		float dx = length * std::cos(angle * (PI / 180.0));
@@ -90,9 +88,7 @@ struct Worm{
 			head = node;
 			size++;
 		}
-
 	}
-
 
 	void AddLast(Segment* node) {
 		if (size == 0) {
@@ -115,7 +111,6 @@ struct Worm{
 			tail = node;
 			size++;   
 		}
-
 	}
 
 	int Size() {
@@ -142,31 +137,38 @@ struct Worm{
 class InverseKinematicsSystem : public olc::PixelGameEngine
 {
 
+	float cursorSpeed = 100;
+
 	float fTargetFrameTime = 1.0f / 100.0f; // Virtual FPS of 100fps
 	float fAccumulatedTime = 0.0f;
+
 	float nextFollowPointTime = 3.0f;
-	float startTime;
+	float startTime = 0;
+
+	float moveSpeed = 2;
+
+	bool movePointSet = false;
+
+	std::vector<olc::vf2d> movePoints;
 
 	olc::vf2d basePoint = olc::vf2d(320.0f, 320.0f);
 
-	olc::vf2d followPoint = olc::vf2d(100,100);
-	olc::vf2d nextFollowPoint;
+	olc::vf2d p0 = olc::vf2d(100, 300);
+	olc::vf2d p1 = olc::vf2d(0, 0);
+	olc::vf2d p2 = olc::vf2d(0, 0);
+	olc::vf2d x = olc::vf2d(0, 0);
+	olc::vf2d x1 = olc::vf2d(0, 0);
+	olc::vf2d x2 = olc::vf2d(0, 0);
+
+	olc::vf2d clickPoint = olc::vf2d(0, 0);
+	olc::vf2d followPoint = olc::vf2d(0, 0);
+
+	olc::vf2d cursorPosition = olc::vf2d(ScreenWidth() / 2, ScreenHeight() / 2);
 
 	Worm worm;
 
 	Segment* baseSegment;
 	Segment* grabSegment;
-
-	int numNodes = 5;
-	int numLegs = 2;
-	int maxIterations = 10;
-	int iterations = 0;
-
-	float initialVelocity = 100.0f;
-	float acceleration = 9.8f;
-	float decceleration = -9.8f;
-	float velocity = 0.0f;
-	float maxVelocity = 10.0f;
 
 public:
 	InverseKinematicsSystem()
@@ -213,20 +215,51 @@ public:
 		// Clear screen every frame
 		Clear(olc::BLACK);
 
-		//Handle player input
+		// Handle player input
 		Input(fElapsedTime);
 
-		if (startTime >= nextFollowPointTime) {
-			olc::vf2d nextPoint = olc::vf2d(rand() % ScreenWidth(), rand() % ScreenHeight());
-			nextFollowPoint = nextPoint;
+		// Draw Player Cursor
+		DrawCircle(cursorPosition, 2, olc::YELLOW);
+
+		FillCircle(p0, 2, olc::WHITE);
+		FillCircle(p1, 2, olc::WHITE);
+		FillCircle(p2, 2, olc::WHITE);
+
+		if (startTime >= nextFollowPointTime) 
+		{
+			srand(time(0));
+			p0 = olc::vf2d(rand() % ScreenWidth(), rand() % ScreenHeight());
+			srand(time(0) * 2);
+			p1 = olc::vf2d(rand() % ScreenWidth(), rand() % ScreenHeight());
+			srand(time(0) * 4);
+			p2 = olc::vf2d(rand() % ScreenWidth(), rand() % ScreenHeight());
+
 			startTime = 0;
-			std::cout << "Drew next point at" << nextPoint << std::endl;
-		}else{
-			followPoint = followPoint.lerp(nextFollowPoint, fElapsedTime);
-			FillCircle(nextFollowPoint, 2, olc::DARK_GREEN);
+
+			std::cout << "p0 " << p0 << std::endl;
+			std::cout << "p1 " << p1 << std::endl;
+			std::cout << "p2 " << p2 << std::endl;
+		}
+		else
+		{
+			
+			//olc::vf2d x1 = p0.lerp(p1, fElapsedTime);
+			//olc::vf2d x2 = p1.lerp(p2, fElapsedTime);
+
+			x = p0.lerp(p2, fElapsedTime);
+
+			FillCircle(p0, 2, olc::RED);
+			FillCircle(p1, 2, olc::GREEN);
+			FillCircle(p2, 2, olc::YELLOW);
+			FillCircle(x, 2, olc::BLUE);
+
+
 		}
 
-		UpdateWorm();
+
+		UpdateWorm(followPoint);
+
+		PrintMovePoints();
 
 		return true;
 	}
@@ -239,11 +272,36 @@ public:
 
 	// Handles User Input, called before any rendering is done
 	void Input(float fElapsedTime) {
+		
+		if (GetKey(olc::W).bHeld) 
+		{
+			cursorPosition.y -= cursorSpeed * fElapsedTime;
+		}
 
+		if (GetKey(olc::S).bHeld)
+		{
+			cursorPosition.y += cursorSpeed * fElapsedTime;
+		}
 
+		if (GetKey(olc::A).bHeld)
+		{
+			cursorPosition.x -= cursorSpeed * fElapsedTime;
+		}
+
+		if (GetKey(olc::D).bHeld)
+		{
+			cursorPosition.x += cursorSpeed * fElapsedTime;
+		}
+
+		if (GetKey(olc::SPACE).bPressed)
+		{
+			std::cout << "PRESSED SPACE" << std::endl;
+			SetMovePoint();
+			MoveToPoint(fElapsedTime);
+		}
 	}
 
-	void UpdateWorm() 
+	void UpdateWorm(olc::vf2d followPoint)
 	{
 		baseSegment = worm.head;
 		baseSegment->prev = NULL;
@@ -262,7 +320,6 @@ public:
 
 		FillCircle(baseSegment->center, baseSegment->radius, olc::WHITE);
 
-
 		Segment* current = baseSegment->next;
 
 		while (current->next != NULL) {
@@ -276,7 +333,43 @@ public:
 			current = current->next;
 		}
 	}
+
+	void UpdateFollowPoint(olc::vf2d moveToPoint, float fElapsedTime)
+	{
+		followPoint = followPoint.lerp(moveToPoint, moveSpeed * fElapsedTime);
+	}
+
+
+	void SetMovePoint()
+	{
+		olc::vf2d point = olc::vf2d(cursorPosition.x, cursorPosition.y);
+		movePoints.emplace_back(point);
+	}
+
+
+	void MoveToPoint(float fElapsedTime) 
+	{
+		if (!movePoints.empty()) 
+		{
+
+			UpdateFollowPoint(movePoints.back(), fElapsedTime);
+
+			if (worm.head->pointB == movePoints.back()) 
+			{
+				movePoints.pop_back();
+			}
+		}
+	}
+
+	void PrintMovePoints()
+	{
+		for (std::vector<olc::vf2d>::iterator itr = movePoints.begin(); itr != movePoints.end(); ++itr)
+		{
+			std::cout << *itr << std::endl;
+		}
+	}
 };
+
 
 
 int main()
