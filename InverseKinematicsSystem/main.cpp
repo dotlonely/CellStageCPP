@@ -1,5 +1,6 @@
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
+#include <queue>
 
 const float PI = 3.1415926535897932384626433832795028841971693993751058209749445923078164062f;
 
@@ -134,6 +135,41 @@ struct Worm{
 
 };
 
+struct Food
+{
+	enum FoodType 
+	{
+		PLANT,
+		MEAT
+	};
+
+	FoodType foodType;
+	olc::vf2d position;
+	olc::Pixel color;
+
+	int nutritionalValue;
+	int radius;
+
+public:
+	Food(olc::vf2d pos, FoodType type, int nutrition, int r)
+	{
+		position = pos;
+		foodType = type;
+		nutritionalValue = nutrition;
+		radius = r;
+
+		if (type == PLANT)
+		{
+			color = olc::GREEN;
+		}
+		else
+		{
+			color = olc::DARK_RED;
+		}
+	}
+};
+
+
 class InverseKinematicsSystem : public olc::PixelGameEngine
 {
 
@@ -143,22 +179,21 @@ class InverseKinematicsSystem : public olc::PixelGameEngine
 	float fAccumulatedTime = 0.0f;
 
 	float nextFollowPointTime = 3.0f;
-	float startTime = 0;
+	float startTime = 0.0f;
 
-	float moveSpeed = 2;
+	float moveSpeed = 2.0f;
 
 	bool movePointSet = false;
 
-	std::vector<olc::vf2d> movePoints;
+	float movePointSize = 1.0f;
+
+	int maxMovePoints = 3;
+
+	std::deque<olc::vf2d> movePoints;
+	
+	std::vector<Food> foodList;
 
 	olc::vf2d basePoint = olc::vf2d(320.0f, 320.0f);
-
-	olc::vf2d p0 = olc::vf2d(100, 300);
-	olc::vf2d p1 = olc::vf2d(0, 0);
-	olc::vf2d p2 = olc::vf2d(0, 0);
-	olc::vf2d x = olc::vf2d(0, 0);
-	olc::vf2d x1 = olc::vf2d(0, 0);
-	olc::vf2d x2 = olc::vf2d(0, 0);
 
 	olc::vf2d clickPoint = olc::vf2d(0, 0);
 	olc::vf2d followPoint = olc::vf2d(0, 0);
@@ -167,8 +202,11 @@ class InverseKinematicsSystem : public olc::PixelGameEngine
 
 	Worm worm;
 
+	Worm grass;
+
 	Segment* baseSegment;
 	Segment* grabSegment;
+
 
 public:
 	InverseKinematicsSystem()
@@ -179,14 +217,14 @@ public:
 public:
 	bool OnUserCreate() override
 	{
-		//Main worm segments
+		// Main worm segments
 		Segment* startNode = new Segment(basePoint.x, basePoint.y, 2.0, 0.0);
 		Segment* secondNode = new Segment(startNode, 3.0);
 		Segment* thirdNode = new Segment(secondNode, 4.0);
 		Segment* fourthNode = new Segment(thirdNode, 5.0);
 		Segment* fifthNode = new Segment(fourthNode, 3.0);
 
-		//Add segments to list
+		// Add segments to list
 		worm.AddFirst(startNode);
 		worm.AddLast(secondNode);
 		worm.AddLast(thirdNode);
@@ -194,23 +232,24 @@ public:
 		worm.AddLast(fifthNode);
 
 
+		Food plantOne = Food(olc::vf2d(rand() % ScreenWidth(), rand() % ScreenHeight()), Food::PLANT, 1, 2);
+		Food plantTwo = Food(olc::vf2d(rand() % ScreenWidth() * 2, rand() % ScreenHeight() * 2), Food::MEAT, 2, 3);
+
+		foodList.emplace_back(plantOne);
+		foodList.emplace_back(plantTwo);
+
+		movePoints.emplace_back(300, 300);
+
+
 		return true;
 	}
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
+		srand(time(0));
 
 		startTime += fElapsedTime;
-
-		//Handles framerate locking
-		fAccumulatedTime += fElapsedTime;
-		if (fAccumulatedTime >= fTargetFrameTime)
-		{
-			fAccumulatedTime -= fTargetFrameTime;
-			fElapsedTime = fTargetFrameTime;
-		}
-		else
-			return true;
+		movePointSize += fElapsedTime;
 
 		// Clear screen every frame
 		Clear(olc::BLACK);
@@ -219,48 +258,32 @@ public:
 		Input(fElapsedTime);
 
 		// Draw Player Cursor
-		DrawCircle(cursorPosition, 2, olc::YELLOW);
-
-		FillCircle(p0, 2, olc::WHITE);
-		FillCircle(p1, 2, olc::WHITE);
-		FillCircle(p2, 2, olc::WHITE);
+		DrawCircle(cursorPosition, 1, olc::YELLOW);
 
 		if (startTime >= nextFollowPointTime) 
 		{
-			srand(time(0));
-			p0 = olc::vf2d(rand() % ScreenWidth(), rand() % ScreenHeight());
-			srand(time(0) * 2);
-			p1 = olc::vf2d(rand() % ScreenWidth(), rand() % ScreenHeight());
-			srand(time(0) * 4);
-			p2 = olc::vf2d(rand() % ScreenWidth(), rand() % ScreenHeight());
-
 			startTime = 0;
+			movePointSize = 1;
 
-			std::cout << "p0 " << p0 << std::endl;
-			std::cout << "p1 " << p1 << std::endl;
-			std::cout << "p2 " << p2 << std::endl;
-		}
-		else
-		{
-			
-			//olc::vf2d x1 = p0.lerp(p1, fElapsedTime);
-			//olc::vf2d x2 = p1.lerp(p2, fElapsedTime);
-
-			x = p0.lerp(p2, fElapsedTime);
-
-			FillCircle(p0, 2, olc::RED);
-			FillCircle(p1, 2, olc::GREEN);
-			FillCircle(p2, 2, olc::YELLOW);
-			FillCircle(x, 2, olc::BLUE);
-
+			PrintMovePoints();
 
 		}
+	
+		
 
 
+	
 		UpdateWorm(followPoint);
 
-		PrintMovePoints();
+		DrawCircle(followPoint, 1, olc::MAGENTA);
 
+		ShowMovePoints(fElapsedTime);
+
+		MoveToPoint(fElapsedTime);
+
+		RenderFood();
+
+		DrawString(280, 10, "SPORE CLONE", olc::WHITE, 1);
 		return true;
 	}
 
@@ -273,6 +296,17 @@ public:
 	// Handles User Input, called before any rendering is done
 	void Input(float fElapsedTime) {
 		
+		if (GetKey(olc::ENTER).bPressed)
+		{
+			SetMovePoint();
+		}
+
+		if (GetMouse(0).bPressed)
+		{
+			SetMovePoint(GetMousePos());
+		}
+
+
 		if (GetKey(olc::W).bHeld) 
 		{
 			cursorPosition.y -= cursorSpeed * fElapsedTime;
@@ -293,14 +327,11 @@ public:
 			cursorPosition.x += cursorSpeed * fElapsedTime;
 		}
 
-		if (GetKey(olc::SPACE).bPressed)
-		{
-			std::cout << "PRESSED SPACE" << std::endl;
-			SetMovePoint();
-			MoveToPoint(fElapsedTime);
-		}
+
 	}
 
+
+	// Updates all worm segments and draws them to screen
 	void UpdateWorm(olc::vf2d followPoint)
 	{
 		baseSegment = worm.head;
@@ -334,38 +365,73 @@ public:
 		}
 	}
 
+
+	// Moves follow point to next point
 	void UpdateFollowPoint(olc::vf2d moveToPoint, float fElapsedTime)
 	{
-		followPoint = followPoint.lerp(moveToPoint, moveSpeed * fElapsedTime);
+		followPoint = ((1 - fElapsedTime) * followPoint + (fElapsedTime * moveToPoint));
 	}
 
-
+	// Sets move point to screen cursor position, and then adds point to queue
 	void SetMovePoint()
 	{
-		olc::vf2d point = olc::vf2d(cursorPosition.x, cursorPosition.y);
-		movePoints.emplace_back(point);
-	}
-
-
-	void MoveToPoint(float fElapsedTime) 
-	{
-		if (!movePoints.empty()) 
+		if (movePoints.size() < maxMovePoints)
 		{
-
-			UpdateFollowPoint(movePoints.back(), fElapsedTime);
-
-			if (worm.head->pointB == movePoints.back()) 
-			{
-				movePoints.pop_back();
-			}
+			olc::vf2d point = olc::vf2d(cursorPosition.x, cursorPosition.y);
+			movePoints.emplace_back(point);
 		}
 	}
 
+	// Sets move point to provided position and adds position to queue
+	void SetMovePoint(olc::vf2d position)
+	{
+		if (movePoints.size() < maxMovePoints)
+		{
+			movePoints.emplace_back(position);
+		}
+	}
+
+	// Calls update follow point
+	void MoveToPoint(float fElapsedTime) 
+	{
+
+		if (followPoint.x - movePoints.front().x < 4 && followPoint.y - movePoints.front().y < 4)
+		{
+			if (movePoints.size() > 1)
+			{
+				movePoints.pop_front();
+			}
+		}
+	
+		UpdateFollowPoint(movePoints.front(), fElapsedTime);
+	}
+
+	// Draws circle at each move point in queue of points
+	void ShowMovePoints(float fElapsedTime) 
+	{
+		for(auto p : movePoints)
+		{
+			DrawCircle(p, movePointSize, olc::BLUE);
+		}
+	}
+
+
+	// Prints each move point in console
 	void PrintMovePoints()
 	{
-		for (std::vector<olc::vf2d>::iterator itr = movePoints.begin(); itr != movePoints.end(); ++itr)
+		for (auto p : movePoints) 
 		{
-			std::cout << *itr << std::endl;
+			std::cout << p << std::endl;
+		}
+	}
+
+
+	// Draws each food circle in list
+	void RenderFood()
+	{
+		for (auto& f : foodList)
+		{
+			DrawCircle(f.position, f.radius, f.color);
 		}
 	}
 };
