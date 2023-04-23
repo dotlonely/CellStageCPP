@@ -173,36 +173,26 @@ public:
 class InverseKinematicsSystem : public olc::PixelGameEngine
 {
 
-	float cursorSpeed = 100;
+	int foodEaten = 0;
+	bool eatInput = false;
 
-	float fTargetFrameTime = 1.0f / 100.0f; // Virtual FPS of 100fps
-	float fAccumulatedTime = 0.0f;
+	Food* currentFood = NULL;
+	int currentFoodIndex = 0;
 
 	float nextFollowPointTime = 3.0f;
 	float startTime = 0.0f;
 
-	float moveSpeed = 2.0f;
+	float moveSpeed = 20.0f;
 
-	bool movePointSet = false;
-
-	float movePointSize = 1.0f;
-
-	int maxMovePoints = 3;
-
-	std::deque<olc::vf2d> movePoints;
+	std::list<Food> foodList;
 	
-	std::vector<Food> foodList;
+	std::string foodString = "Food: " + foodEaten;
 
 	olc::vf2d basePoint = olc::vf2d(320.0f, 320.0f);
 
-	olc::vf2d clickPoint = olc::vf2d(0, 0);
 	olc::vf2d followPoint = olc::vf2d(0, 0);
 
-	olc::vf2d cursorPosition = olc::vf2d(ScreenWidth() / 2, ScreenHeight() / 2);
-
 	Worm worm;
-
-	Worm grass;
 
 	Segment* baseSegment;
 	Segment* grabSegment;
@@ -231,15 +221,11 @@ public:
 		worm.AddLast(fourthNode);
 		worm.AddLast(fifthNode);
 
-
 		Food plantOne = Food(olc::vf2d(rand() % ScreenWidth(), rand() % ScreenHeight()), Food::PLANT, 1, 2);
 		Food plantTwo = Food(olc::vf2d(rand() % ScreenWidth() * 2, rand() % ScreenHeight() * 2), Food::MEAT, 2, 3);
 
-		foodList.emplace_back(plantOne);
-		foodList.emplace_back(plantTwo);
-
-		movePoints.emplace_back(300, 300);
-
+		foodList.push_back(plantOne);
+		foodList.push_back(plantTwo);
 
 		return true;
 	}
@@ -249,7 +235,6 @@ public:
 		srand(time(0));
 
 		startTime += fElapsedTime;
-		movePointSize += fElapsedTime;
 
 		// Clear screen every frame
 		Clear(olc::BLACK);
@@ -257,33 +242,21 @@ public:
 		// Handle player input
 		Input(fElapsedTime);
 
-		// Draw Player Cursor
-		DrawCircle(cursorPosition, 1, olc::YELLOW);
-
 		if (startTime >= nextFollowPointTime) 
 		{
 			startTime = 0;
-			movePointSize = 1;
-
-			PrintMovePoints();
-
 		}
 	
-		
-
 
 	
 		UpdateWorm(followPoint);
 
-		DrawCircle(followPoint, 1, olc::MAGENTA);
-
-		ShowMovePoints(fElapsedTime);
-
-		MoveToPoint(fElapsedTime);
+		EatFood();
 
 		RenderFood();
 
 		DrawString(280, 10, "SPORE CLONE", olc::WHITE, 1);
+
 		return true;
 	}
 
@@ -296,35 +269,34 @@ public:
 	// Handles User Input, called before any rendering is done
 	void Input(float fElapsedTime) {
 		
-		if (GetKey(olc::ENTER).bPressed)
+		if (GetKey(olc::E).bPressed)
 		{
-			SetMovePoint();
+			eatInput = true;
 		}
-
-		if (GetMouse(0).bPressed)
+		else if (GetKey(olc::E).bReleased)
 		{
-			SetMovePoint(GetMousePos());
+			eatInput = false;
 		}
 
 
 		if (GetKey(olc::W).bHeld) 
 		{
-			cursorPosition.y -= cursorSpeed * fElapsedTime;
+			followPoint.y -= moveSpeed * fElapsedTime;
 		}
 
 		if (GetKey(olc::S).bHeld)
 		{
-			cursorPosition.y += cursorSpeed * fElapsedTime;
+			followPoint.y += moveSpeed * fElapsedTime;
 		}
 
 		if (GetKey(olc::A).bHeld)
 		{
-			cursorPosition.x -= cursorSpeed * fElapsedTime;
+			followPoint.x -= moveSpeed * fElapsedTime;
 		}
 
 		if (GetKey(olc::D).bHeld)
 		{
-			cursorPosition.x += cursorSpeed * fElapsedTime;
+			followPoint.x += moveSpeed * fElapsedTime;
 		}
 
 
@@ -372,60 +344,6 @@ public:
 		followPoint = ((1 - fElapsedTime) * followPoint + (fElapsedTime * moveToPoint));
 	}
 
-	// Sets move point to screen cursor position, and then adds point to queue
-	void SetMovePoint()
-	{
-		if (movePoints.size() < maxMovePoints)
-		{
-			olc::vf2d point = olc::vf2d(cursorPosition.x, cursorPosition.y);
-			movePoints.emplace_back(point);
-		}
-	}
-
-	// Sets move point to provided position and adds position to queue
-	void SetMovePoint(olc::vf2d position)
-	{
-		if (movePoints.size() < maxMovePoints)
-		{
-			movePoints.emplace_back(position);
-		}
-	}
-
-	// Calls update follow point
-	void MoveToPoint(float fElapsedTime) 
-	{
-
-		if (followPoint.x - movePoints.front().x < 4 && followPoint.y - movePoints.front().y < 4)
-		{
-			if (movePoints.size() > 1)
-			{
-				movePoints.pop_front();
-			}
-		}
-	
-		UpdateFollowPoint(movePoints.front(), fElapsedTime);
-	}
-
-	// Draws circle at each move point in queue of points
-	void ShowMovePoints(float fElapsedTime) 
-	{
-		for(auto p : movePoints)
-		{
-			DrawCircle(p, movePointSize, olc::BLUE);
-		}
-	}
-
-
-	// Prints each move point in console
-	void PrintMovePoints()
-	{
-		for (auto p : movePoints) 
-		{
-			std::cout << p << std::endl;
-		}
-	}
-
-
 	// Draws each food circle in list
 	void RenderFood()
 	{
@@ -434,6 +352,24 @@ public:
 			DrawCircle(f.position, f.radius, f.color);
 		}
 	}
+
+	void EatFood()
+	{
+
+		for (auto& f : foodList)
+		{
+			if (f.position.x - followPoint.x <= 2 && f.position.y - followPoint.y <= 2)
+			{
+				if (eatInput)
+				{
+					foodEaten++;
+					foodList.pop_back();
+					std::cout << "Touching food" << std::endl;
+				}
+			}
+		}
+	}
+
 };
 
 
