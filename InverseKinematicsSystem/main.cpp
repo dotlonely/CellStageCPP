@@ -69,22 +69,47 @@ struct Segment {
 };
 
 struct Worm{
+
+	enum GrowthStage
+	{
+		STAGE1,
+		STAGE2,
+		STAGE3,
+		STAGE4,
+		STAGE5
+	};
+
+	int currentStage = STAGE1;
+	int nextStage = currentStage + 1;
+
+	int stage1GrowthRequirement = 10;
+	int stage2GrowthRequirement = 20;
+	int stage3GrowthRequirement = 30;
+	int stage4GrowthRequirement = 40;
+	int stage5GrowthRequirement = 50;
+	
+
 	Segment* head;
 	Segment* tail;
 	int size = 0;
+	
+	int foodEaten = 0;
 
-	void AddFirst(Segment* node) {
+	void AddFirst(Segment* node) 
+	{
 		if (size == 0) {
 			head = node;
 			tail = node;
 			size++;
-		} else if (head == tail) {
+		} else if (head == tail) 
+		{
 			node->next = tail;
 			tail->prev = node;
 			head = node;
 			size++;
 		}
-		else {
+		else 
+		{
 			node->next = head;
 			head->prev = node;
 			head = node;
@@ -148,11 +173,16 @@ struct Food
 	FoodType foodType;
 
 	olc::vi2d position;
+	olc::vf2d velocity;
+	olc::vf2d acceleration;
 
 	olc::Pixel color;
 
+	int id;
 	int nutritionalValue;
 	int radius;
+
+	float eatenDecayTimer;
 
 	bool eaten;
 	bool exists;
@@ -170,7 +200,7 @@ public:
 		}
 		else foodType = PLANT;
 
-		nutritionalValue = rand() % 5;
+		nutritionalValue = (rand() % 5) + 1;
 		radius = nutritionalValue;
 		eaten = false;
 
@@ -198,10 +228,12 @@ public:
 };
 
 
-class InverseKinematicsSystem : public olc::PixelGameEngine
+class CellStage : public olc::PixelGameEngine
 {
 
 	float timer = 3.0f;
+
+	float eatenFoodDecayTimer = 10.0f;
 
 
 	int maxFoodAmount = 10;
@@ -221,22 +253,22 @@ class InverseKinematicsSystem : public olc::PixelGameEngine
 
 	olc::vf2d followPoint = { ScreenWidth() / 2.0f, ScreenHeight() / 2.0f};
 
-	Worm worm;
+	Worm player;
 
 	Segment* baseSegment;
 	Segment* grabSegment;
 
 	
 public:
-	InverseKinematicsSystem()
+	CellStage()
 	{
-		sAppName = "InverseKinematicsSystem";
+		sAppName = "CellStage";
 	}
 
 public:
 	bool OnUserCreate() override
 	{
-		// Main worm segments
+		// Main player segments
 		Segment* startNode = new Segment(basePoint.x, basePoint.y, 1.0, 0.0);
 		Segment* secondNode = new Segment(startNode, 2.0);
 		//Segment* thirdNode = new Segment(secondNode, 4.0);
@@ -244,11 +276,11 @@ public:
 		//Segment* fifthNode = new Segment(fourthNode, 3.0);
 
 		// Add segments to list
-		worm.AddFirst(startNode);
-		worm.AddLast(secondNode);
-		//worm.AddLast(thirdNode);
-		//worm.AddLast(fourthNode);
-		//worm.AddLast(fifthNode);
+		player.AddFirst(startNode);
+		player.AddLast(secondNode);
+		//player.AddLast(thirdNode);
+		//player.AddLast(fourthNode);
+		//player.AddLast(fifthNode);
 
 
 
@@ -274,7 +306,7 @@ public:
 
 		UpdateWorm(followPoint);
 
-		DrawString(280, 10, "SPORE CLONE", olc::WHITE, 1.0f);
+		DrawString(280, 10, "cellStage", olc::WHITE, 1.0f);
 
 		if (startTime >= timer)
 		{
@@ -287,8 +319,12 @@ public:
 			startTime = 0;
 		}
 
-		RenderFood();
+		for (auto& f : foodList)
+		{
+			HandlePlayerCollision(f);
+		}
 
+		RenderFood();
 
 		return true;
 	}
@@ -305,6 +341,10 @@ public:
 		if (GetKey(olc::E).bPressed)
 		{
 			eatInput = true;
+		}
+		else if (GetKey(olc::E).bHeld)
+		{
+			eatInput = false;
 		}
 		else if (GetKey(olc::E).bReleased)
 		{
@@ -336,12 +376,12 @@ public:
 	}
 
 
-	// Updates all worm segments and draws them to screen
+	// Updates all player segments and draws them to screen
 	void UpdateWorm(olc::vf2d followPoint)
 	{
-		baseSegment = worm.head;
+		baseSegment = player.head;
 		baseSegment->prev = NULL;
-		grabSegment = worm.tail;
+		grabSegment = player.tail;
 		grabSegment->next = NULL;
 
 		grabSegment->Follow(followPoint);
@@ -374,8 +414,6 @@ public:
 	{
 
 		std::cout << "SIZE: " << foodList.size() << std::endl;
-		
-		int count = 0;
 
 		std::string type;
 
@@ -388,8 +426,7 @@ public:
 			}
 			else type = "MEAT";
 
-			std::cout << count << " : " << type << ", " << f.position << std::endl;
-			count++;
+			std::cout << f.id << " : " << type << ", " << f.position << std::endl;
 		}
 	}
 
@@ -399,11 +436,25 @@ public:
 		{
 			
 			Food food = { rnd1, rnd2 };
+			food.id = foodList.size();
 
 			foodList.push_back(food);
 		}
 
 		currentFoodAmount += numFood;
+	}
+
+	void CheckEatenFoodDecayed(Food& f)
+	{
+		if (f.eaten)
+		{
+			f.eatenDecayTimer += startTime;
+
+			if (f.eatenDecayTimer >= eatenFoodDecayTimer)
+			{
+				// TODO: Respawn food to new location but same place in list.
+			}
+		}
 	}
 
 	void RenderFood()
@@ -414,14 +465,68 @@ public:
 		}
 	}
 
+	void HandleFoodCollision()
+	{
+		//TODO: Set up collision between food objects
+	}
 
+
+	// Checks if player is currently colliding with a food object
+	void HandlePlayerCollision(Food& f)
+	{
+		//TODO: Set up collision between player and food (think about player and other entities as well)
+		if (DoCirclesOverlap(player.tail->center.x, player.tail->center.y, player.tail->radius, f.position.x, f.position.y, f.radius))
+		{
+			if (eatInput)
+			{
+				EatFood(f);
+			}
+		}
+	}
+
+	bool DoCirclesOverlap(float x1, float y1, float r1, float x2, float y2, float r2)
+	{
+		return fabs((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)) <= (r1 + r2) * (r1 + r2);
+	}
+
+	void EatFood(Food& f)
+	{
+		if (f.radius < 2)
+		{
+			f.eaten = true;
+			f.color = olc::GREY;
+		}
+		else 
+		{
+			f.radius--;
+		}
+
+		player.foodEaten++;
+	}
+
+
+	void HandlePlayerGrowth()
+	{
+		if (player.currentStage == player.STAGE1)
+		{
+			
+		}
+	}
+
+	bool CheckIfShouldGrow()
+	{
+		if (player.foodEaten > player.stage1GrowthRequirement)
+		{
+
+		}
+	}
 };
 
 
 
 int main()
 {
-	InverseKinematicsSystem demo;
+	CellStage demo;
 	if (demo.Construct(640, 360, 2, 2))
 		demo.Start();
 	return 0;

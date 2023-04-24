@@ -24,6 +24,7 @@
     <ProjectGuid>{514057de-262f-4c94-91c3-f429d7e8cc13}</ProjectGuid>
     <RootNamespace>InverseKinematicsSystem</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>CellStage</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
