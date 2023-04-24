@@ -1,6 +1,7 @@
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
 #include <queue>
+#include <random>
 
 const float PI = 3.1415926535897932384626433832795028841971693993751058209749445923078164062f;
 
@@ -12,7 +13,7 @@ struct Segment {
 	olc::vf2d center = olc::vf2d(1, 1);
 	olc::vf2d pointA = olc::vf2d(1, 1);
 	olc::vf2d pointB = olc::vf2d(1, 1);
-	float length = 5.0;
+	float length = 3.0;
 
 	Segment(float x, float y, float radius, float angle) {
 		pointA.x = x;
@@ -143,61 +144,89 @@ struct Food
 		MEAT
 	};
 
+
 	FoodType foodType;
-	olc::vf2d position;
+
+	olc::vi2d position;
+
 	olc::Pixel color;
 
 	int nutritionalValue;
 	int radius;
 
-public:
-	Food(olc::vf2d pos, FoodType type, int nutrition, int r)
-	{
-		position = pos;
-		foodType = type;
-		nutritionalValue = nutrition;
-		radius = r;
+	bool eaten;
+	bool exists;
 
-		if (type == PLANT)
+		
+public:
+	Food(int x, int y)
+	{
+
+		position = { x, y };
+
+		if (rand() % 2 == 1)
 		{
-			color = olc::GREEN;
+			foodType = MEAT;
 		}
-		else
+		else foodType = PLANT;
+
+		nutritionalValue = rand() % 5;
+		radius = nutritionalValue;
+		eaten = false;
+
+		if (foodType == MEAT)
 		{
 			color = olc::DARK_RED;
 		}
+		else
+		{
+			color = olc::DARK_GREEN;
+		}
+
 	}
+
+	std::string ToString()
+	{
+		if (foodType == PLANT)
+		{
+			return "PLANT";
+		}
+		else return "MEAT";
+	}
+
+
 };
 
 
 class InverseKinematicsSystem : public olc::PixelGameEngine
 {
 
+	float timer = 3.0f;
+
+
+	int maxFoodAmount = 10;
+	int currentFoodAmount = 0;
+
 	int foodEaten = 0;
 	bool eatInput = false;
 
-	Food* currentFood = NULL;
-	int currentFoodIndex = 0;
 
-	float nextFollowPointTime = 3.0f;
 	float startTime = 0.0f;
 
-	float moveSpeed = 20.0f;
+	float moveSpeed = 50.0f;
 
-	std::list<Food> foodList;
-	
-	std::string foodString = "Food: " + foodEaten;
+	std::vector<Food> foodList;
 
-	olc::vf2d basePoint = olc::vf2d(320.0f, 320.0f);
+	olc::vf2d basePoint = { 320.0f, 320.0f };
 
-	olc::vf2d followPoint = olc::vf2d(0, 0);
+	olc::vf2d followPoint = { ScreenWidth() / 2.0f, ScreenHeight() / 2.0f};
 
 	Worm worm;
 
 	Segment* baseSegment;
 	Segment* grabSegment;
 
-
+	
 public:
 	InverseKinematicsSystem()
 	{
@@ -208,54 +237,58 @@ public:
 	bool OnUserCreate() override
 	{
 		// Main worm segments
-		Segment* startNode = new Segment(basePoint.x, basePoint.y, 2.0, 0.0);
-		Segment* secondNode = new Segment(startNode, 3.0);
-		Segment* thirdNode = new Segment(secondNode, 4.0);
-		Segment* fourthNode = new Segment(thirdNode, 5.0);
-		Segment* fifthNode = new Segment(fourthNode, 3.0);
+		Segment* startNode = new Segment(basePoint.x, basePoint.y, 1.0, 0.0);
+		Segment* secondNode = new Segment(startNode, 2.0);
+		//Segment* thirdNode = new Segment(secondNode, 4.0);
+		//Segment* fourthNode = new Segment(thirdNode, 5.0);
+		//Segment* fifthNode = new Segment(fourthNode, 3.0);
 
 		// Add segments to list
 		worm.AddFirst(startNode);
 		worm.AddLast(secondNode);
-		worm.AddLast(thirdNode);
-		worm.AddLast(fourthNode);
-		worm.AddLast(fifthNode);
+		//worm.AddLast(thirdNode);
+		//worm.AddLast(fourthNode);
+		//worm.AddLast(fifthNode);
 
-		Food plantOne = Food(olc::vf2d(rand() % ScreenWidth(), rand() % ScreenHeight()), Food::PLANT, 1, 2);
-		Food plantTwo = Food(olc::vf2d(rand() % ScreenWidth() * 2, rand() % ScreenHeight() * 2), Food::MEAT, 2, 3);
 
-		foodList.push_back(plantOne);
-		foodList.push_back(plantTwo);
 
 		return true;
 	}
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
-		srand(time(0));
+
+		std::random_device rd;
+		std::mt19937 mt(rd());
+		std::uniform_int_distribution<int> dist1(0, ScreenWidth());
+		std::uniform_int_distribution<int> dist2(0, ScreenHeight());
 
 		startTime += fElapsedTime;
 
 		// Clear screen every frame
-		Clear(olc::BLACK);
+		Clear(olc::Pixel(0, 0, 20));
 
 		// Handle player input
 		Input(fElapsedTime);
 
-		if (startTime >= nextFollowPointTime) 
-		{
-			startTime = 0;
-		}
-	
 
-	
 		UpdateWorm(followPoint);
 
-		EatFood();
+		DrawString(280, 10, "SPORE CLONE", olc::WHITE, 1.0f);
+
+		if (startTime >= timer)
+		{
+			if (currentFoodAmount < maxFoodAmount)
+			{
+				SpawnFood(1, dist1(mt), dist2(mt));
+			}
+
+			PrintFoodList();
+			startTime = 0;
+		}
 
 		RenderFood();
 
-		DrawString(280, 10, "SPORE CLONE", olc::WHITE, 1);
 
 		return true;
 	}
@@ -337,38 +370,50 @@ public:
 		}
 	}
 
-
-	// Moves follow point to next point
-	void UpdateFollowPoint(olc::vf2d moveToPoint, float fElapsedTime)
+	void PrintFoodList()
 	{
-		followPoint = ((1 - fElapsedTime) * followPoint + (fElapsedTime * moveToPoint));
+
+		std::cout << "SIZE: " << foodList.size() << std::endl;
+		
+		int count = 0;
+
+		std::string type;
+
+
+		for (auto& f : foodList)
+		{
+			if (f.foodType == 0)
+			{
+				type = "PLANT";
+			}
+			else type = "MEAT";
+
+			std::cout << count << " : " << type << ", " << f.position << std::endl;
+			count++;
+		}
 	}
 
-	// Draws each food circle in list
+	void SpawnFood(int numFood, int rnd1, int rnd2)
+	{
+		for (int i = 0; i < numFood; ++i)
+		{
+			
+			Food food = { rnd1, rnd2 };
+
+			foodList.push_back(food);
+		}
+
+		currentFoodAmount += numFood;
+	}
+
 	void RenderFood()
 	{
 		for (auto& f : foodList)
 		{
-			DrawCircle(f.position, f.radius, f.color);
+			FillCircle(f.position, f.radius, f.color);
 		}
 	}
 
-	void EatFood()
-	{
-
-		for (auto& f : foodList)
-		{
-			if (f.position.x - followPoint.x <= 2 && f.position.y - followPoint.y <= 2)
-			{
-				if (eatInput)
-				{
-					foodEaten++;
-					foodList.pop_back();
-					std::cout << "Touching food" << std::endl;
-				}
-			}
-		}
-	}
 
 };
 
