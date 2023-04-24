@@ -72,19 +72,21 @@ struct Worm{
 
 	enum GrowthStage
 	{
-		STAGE1,
-		STAGE2,
-		STAGE3,
-		STAGE4,
-		STAGE5
+		STAGE1, // 0
+		STAGE2, // 1
+		STAGE3, // 2
+		STAGE4, // 3
+		STAGE5  // 4
 	};
 
 	int currentStage = STAGE1;
 
-	int stage2GrowthRequirement = 10;
-	int stage3GrowthRequirement = 20;
-	int stage4GrowthRequirement = 30;
-	int stage5GrowthRequirement = 40;
+	int stage2GrowthRequirement = 2;
+	int stage3GrowthRequirement = 4;
+	int stage4GrowthRequirement = 6;
+	int stage5GrowthRequirement = 8;
+
+	int maxStage = STAGE5;
 	
 	int currentGrowthRequirement = 0;
 
@@ -230,12 +232,12 @@ public:
 class CellStage : public olc::PixelGameEngine
 {
 
-	float timer = 3.0f;
+	float timer = 1.0f;
 
 	float eatenFoodDecayTimer = 10.0f;
 
 
-	int maxFoodAmount = 10;
+	int maxFoodAmount = 20;
 	int currentFoodAmount = 0;
 
 	int foodEaten = 0;
@@ -516,11 +518,32 @@ public:
 		if (CheckIfShouldGrow())
 		{
 
-			player.currentStage = player.currentStage + 1;
+			if (player.currentStage == player.maxStage)
+			{
+				return;
+			}
+			else
+			{
+				player.currentStage = player.currentStage + 1;
+			}
 		
 			std::cout << "Player has grown from stage: " << player.currentStage - 1 << " to stage: " << player.currentStage << std::endl;
 
 			// TODO: Add another segment to player and adjust other segment sizes
+			Segment* newSegment = new Segment(0, 0, 2, 0);
+
+
+			// Adjust new Segment's attributes
+			newSegment->length = player.head->length;
+
+			// Makes new segment  the "head" of the player so its size should always be two, "tail should always be 1
+			player.AddLast(newSegment);
+
+
+			player.tail->radius++;
+
+			//player.head->radius = player.tail->radius - 1;
+			player.head->length = player.tail->length;
 
 
 		}
@@ -528,6 +551,9 @@ public:
 
 	bool CheckIfShouldGrow()
 	{
+		if (player.currentStage == player.maxStage)
+			return false;
+
 		if (player.foodEaten >= player.currentGrowthRequirement)
 			return true;
 		else return false;
@@ -547,7 +573,7 @@ public:
 		{
 			player.currentGrowthRequirement = player.stage4GrowthRequirement;
 		}
-		else if (player.currentStage = 3)
+		else if (player.currentStage == 3)
 		{
 			player.currentGrowthRequirement = player.stage5GrowthRequirement;
 		}
@@ -555,6 +581,7 @@ public:
 		{
 			player.currentGrowthRequirement = 999;
 		}
+		
 	}
 };
 
