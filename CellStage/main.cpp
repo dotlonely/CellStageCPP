@@ -81,10 +81,10 @@ struct Worm{
 
 	int currentStage = STAGE1;
 
-	int stage2GrowthRequirement = 2;
-	int stage3GrowthRequirement = 4;
-	int stage4GrowthRequirement = 6;
-	int stage5GrowthRequirement = 8;
+	int stage2GrowthRequirement = 10;
+	int stage3GrowthRequirement = 20;
+	int stage4GrowthRequirement = 30;
+	int stage5GrowthRequirement = 40;
 
 	int maxStage = STAGE5;
 	
@@ -160,6 +160,30 @@ struct Worm{
 		return count;
 	}
 
+	std::string CurrentStageToString()
+	{
+
+		if (currentStage == STAGE1)
+		{
+			return "Growth Stage 1";
+		}
+		else if (currentStage == STAGE2)
+		{
+			return "Growth Stage 2";
+		}
+		else if (currentStage == STAGE3)
+		{
+			return "Growth Stage 3";
+		}
+		else if (currentStage == STAGE4)
+		{
+			return "Growth Stage 4";
+		}
+		else
+		{
+			return "Growth Stage Max";
+		}
+	}
 };
 
 struct Food
@@ -232,12 +256,12 @@ public:
 class CellStage : public olc::PixelGameEngine
 {
 
+
 	float timer = 1.0f;
 
 	float eatenFoodDecayTimer = 10.0f;
 
-
-	int maxFoodAmount = 20;
+	int maxFoodAmount = 30;
 	int currentFoodAmount = 0;
 
 	int foodEaten = 0;
@@ -288,6 +312,8 @@ public:
 		return true;
 	}
 
+	// GAME UPDATE -------------------------------------------------------------------------------------------
+
 	bool OnUserUpdate(float fElapsedTime) override
 	{
 
@@ -305,9 +331,13 @@ public:
 		Input(fElapsedTime);
 
 
-		UpdatePlayer(followPoint);
+		UpdateCorePlayer(followPoint);
 
 		DrawString(280, 10, "cellStage", olc::WHITE, 1.0f);
+
+		DrawString(10, 10, "Press 'e' to Eat food!", olc::WHITE, 1.0f);
+
+		DrawString(10, 350, player.CurrentStageToString(), olc::WHITE, 1.0f);
 
 		if (startTime >= timer)
 		{
@@ -332,6 +362,9 @@ public:
 
 		return true;
 	}
+
+
+	// -------------------------------------------------------------------------------------------------------
 
 
 	// Draws specific segments circle
@@ -377,11 +410,16 @@ public:
 		}
 
 
+		if (GetKey(olc::ESCAPE).bPressed)
+		{
+
+		}
+
 	}
 
 
 	// Updates all player segments and draws them to screen
-	void UpdatePlayer(olc::vf2d followPoint)
+	void UpdateCorePlayer(olc::vf2d followPoint)
 	{
 		baseSegment = player.head;
 		baseSegment->prev = NULL;
@@ -416,6 +454,12 @@ public:
 		GetCurrentStageGrowthRequirement();
 		HandlePlayerGrowth();
 		
+	}
+
+
+	void UpdatePlayerLooks()
+	{
+		// TODO: Draw extra things on player based on diet, kills, etc...
 	}
 
 	void PrintFoodList()
@@ -475,14 +519,14 @@ public:
 
 	void HandleFoodCollision()
 	{
-		//TODO: Set up collision between food objects
+		// TODO: Set up collision between food objects
 	}
 
 
 	// Checks if player is currently colliding with a food object
 	void HandlePlayerCollision(Food& f)
 	{
-		//TODO: Set up collision between player and food (think about player and other entities as well)
+		// TODO: Set up collision between player and food (think about player and other entities as well)
 		if (DoCirclesOverlap(player.tail->center.x, player.tail->center.y, player.tail->radius, f.position.x, f.position.y, f.radius))
 		{
 			if (eatInput)
@@ -528,10 +572,9 @@ public:
 			}
 		
 			std::cout << "Player has grown from stage: " << player.currentStage - 1 << " to stage: " << player.currentStage << std::endl;
-
-			// TODO: Add another segment to player and adjust other segment sizes
+			
+			// Creates new segment (on the heap)
 			Segment* newSegment = new Segment(0, 0, 2, 0);
-
 
 			// Adjust new Segment's attributes
 			newSegment->length = player.head->length;
@@ -539,13 +582,9 @@ public:
 			// Makes new segment  the "head" of the player so its size should always be two, "tail should always be 1
 			player.AddLast(newSegment);
 
-
+			// Adjusts head and tail relative to new changes. (aka makes tail slightly bigger, and increases head length so we can still see the 1 radius circle
 			player.tail->radius++;
-
-			//player.head->radius = player.tail->radius - 1;
 			player.head->length = player.tail->length;
-
-
 		}
 	}
 
@@ -581,7 +620,6 @@ public:
 		{
 			player.currentGrowthRequirement = 999;
 		}
-		
 	}
 };
 
