@@ -15,6 +15,8 @@ struct Segment {
 	olc::vf2d pointB = olc::vf2d(1, 1);
 	float length = 3.0;
 
+	olc::Pixel color = { 255, 255, 255, 1 }; 
+
 	Segment(float x, float y, float radius, float angle) {
 		pointA.x = x;
 		pointA.y = y;
@@ -90,11 +92,20 @@ struct Worm{
 	
 	int currentGrowthRequirement = 0;
 
+	int foodEaten = 0;
+	int meatEaten = 0;
+	int plantsEaten = 0;
+
+	bool herbivore = false;
+	bool carnivore = false;
+	bool omnivore = true;
+
+	olc::Pixel color = { 255, 255, 255, 255};
+
 	Segment* head;
 	Segment* tail;
 	int size = 0;
 	
-	int foodEaten = 0;
 
 	void AddFirst(Segment* node) 
 	{
@@ -231,11 +242,11 @@ public:
 
 		if (foodType == MEAT)
 		{
-			color = olc::DARK_RED;
+			color = olc::VERY_DARK_RED;
 		}
 		else
 		{
-			color = olc::DARK_GREEN;
+			color = olc::VERY_DARK_GREEN;
 		}
 
 	}
@@ -257,7 +268,7 @@ class CellStage : public olc::PixelGameEngine
 {
 
 
-	float timer = 1.0f;
+	float timer = 0.5f;
 
 	float eatenFoodDecayTimer = 10.0f;
 
@@ -338,6 +349,8 @@ public:
 		DrawString(10, 10, "Press 'e' to Eat food!", olc::WHITE, 1.0f);
 
 		DrawString(10, 350, player.CurrentStageToString(), olc::WHITE, 1.0f);
+
+		DrawString(600, 350, std::to_string(player.foodEaten), olc::WHITE, 1.0f);
 
 		if (startTime >= timer)
 		{
@@ -430,13 +443,13 @@ public:
 		grabSegment->CalculatePointB();
 		grabSegment->CalculateCenter();
 
-		FillCircle(grabSegment->center, grabSegment->radius, olc::WHITE);
+		FillCircle(grabSegment->center, grabSegment->radius, player.color);
 
 		baseSegment->Follow();
 		baseSegment->CalculatePointB();
 		baseSegment->CalculateCenter();
 
-		FillCircle(baseSegment->center, baseSegment->radius, olc::WHITE);
+		FillCircle(baseSegment->center, baseSegment->radius, player.color);
 
 		Segment* current = baseSegment->next;
 
@@ -446,20 +459,59 @@ public:
 			current->CalculatePointB();
 			current->CalculateCenter();
 
-			RenderSegment(current, olc::WHITE);
+			RenderSegment(current, player.color);
 
 			current = current->next;
 		}
 
 		GetCurrentStageGrowthRequirement();
 		HandlePlayerGrowth();
+
 		
 	}
 
 
+	void UpdatePlayerStats()
+	{
+
+		if (player.plantsEaten > player.meatEaten)
+		{
+			player.herbivore = true;
+			player.omnivore = false;
+			player.carnivore = false;
+		}
+		else if (player.meatEaten > player.plantsEaten)
+		{
+			player.carnivore = true;
+			player.omnivore = false;
+			player.herbivore = false;
+		}
+		else
+		{
+			player.omnivore = true;
+			player.carnivore = false;
+			player.herbivore = false;
+		}
+	
+	}
+
 	void UpdatePlayerLooks()
 	{
+		
 		// TODO: Draw extra things on player based on diet, kills, etc...
+
+		if (player.plantsEaten > player.meatEaten)
+		{
+			player.color = olc::DARK_GREEN;
+		}
+		else if (player.meatEaten > player.plantsEaten)
+		{
+			player.color = olc::DARK_RED;
+		}
+		else
+		{
+			player.color = olc::WHITE;
+		}
 	}
 
 	void PrintFoodList()
@@ -543,17 +595,41 @@ public:
 
 	void EatFood(Food& f)
 	{
-		if (f.radius < 2)
-		{
-			f.eaten = true;
-			f.color = olc::GREY;
-		}
-		else 
-		{
-			f.radius--;
-		}
 
-		player.foodEaten++;
+		if ((player.omnivore || player.herbivore) && f.foodType == f.PLANT)
+		{
+
+			if (f.radius < 2)
+			{
+				f.eaten = true;
+				f.color = olc::GREY;
+			}
+			else
+			{
+				f.radius--;
+			}
+
+			player.plantsEaten++;
+			player.foodEaten++;
+		}
+		
+		
+		if ((player.omnivore || player.carnivore) && f.foodType == f.MEAT)
+		{
+
+			if (f.radius < 2)
+			{
+				f.eaten = true;
+				f.color = olc::GREY;
+			}
+			else
+			{
+				f.radius--;
+			}
+
+			player.meatEaten++;
+			player.foodEaten++;
+		}
 	}
 
 
@@ -570,6 +646,9 @@ public:
 			{
 				player.currentStage = player.currentStage + 1;
 			}
+
+			UpdatePlayerLooks();
+			UpdatePlayerStats();
 		
 			std::cout << "Player has grown from stage: " << player.currentStage - 1 << " to stage: " << player.currentStage << std::endl;
 			
