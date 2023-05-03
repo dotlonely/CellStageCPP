@@ -71,7 +71,8 @@ struct Segment {
 
 };
 
-struct Creature{
+struct Creature
+{
 
 	enum GrowthStage
 	{
@@ -103,9 +104,14 @@ struct Creature{
 
 	olc::Pixel color = { 255, 255, 255, 255};
 
-	Segment* head;
-	Segment* tail;
+	Segment* head = NULL;
+	Segment* tail = NULL;
+
 	int size = 0;
+
+	olc::vf2d followPoint;
+
+	float moveSpeed = 50;
 
 	Creature(){ }
 
@@ -118,7 +124,6 @@ struct Creature{
 		}
 	}
 	
-
 	void AddFirst(Segment* node) 
 	{
 		if (size == 0) {
@@ -164,25 +169,6 @@ struct Creature{
 		}
 	}
 
-	int Size() {
-		if (head == NULL && tail == NULL) 
-			return 0;
-
-		if (head == tail)
-			return 1;
-		
-		int count = 0;
-
-		Segment* current = head;
-
-		while (current->next != NULL) {
-			current = current->next;
-			count++;
-		}
-
-		return count;
-	}
-
 	std::string CurrentStageToString()
 	{
 
@@ -207,10 +193,98 @@ struct Creature{
 			return "Growth Stage Max";
 		}
 	}
+
+	void SetFollowPoint(olc::vf2d point)
+	{
+		followPoint = point;
+	}
+
+	void EatFood(FoodPiece& f)
+	{
+		if ((omnivore || herbivore) && f.GetFoodType() == 0)
+		{
+
+			if (f.GetRadius() < 2)
+			{
+				f.SetIsEaten(true);
+				f.SetColor(olc::GREY);
+			}
+			else
+			{
+				f.SetRadius(f.GetRadius() - 1);
+			}
+
+			plantsEaten++;
+			foodEaten++;
+		}
+
+
+		if ((omnivore || carnivore) && f.GetFoodType() == 1)
+		{
+			if (f.GetRadius() < 2)
+			{
+				f.SetIsEaten(true);
+				f.SetColor(olc::GREY);
+			}
+			else
+			{
+				f.SetRadius(f.GetRadius() - 1);
+			}
+
+			meatEaten++;
+			foodEaten++;
+		}
+	}
+
+	void HandleCollision(FoodPiece& f)
+	{
+		// TODO: Set up collision between player and food (think about player and other entities as well)
+		if (DoCirclesOverlap(tail->center.x, tail->center.y, tail->radius, f.GetPosition().x, f.GetPosition().y, f.GetRadius()))
+		{
+			// TODO: Might need timer to ensure AI cant instant eat every stage of food
+			EatFood(f);
+		}
+	}
+
+	void UpdateCore(olc::PixelGameEngine* pge, olc::vf2d followPoint)
+	{
+		tail->Follow(followPoint);
+		tail->CalculatePointB();
+		tail->CalculateCenter();
+
+		RenderSegment(pge, tail);
+
+		Segment* current = head;
+
+		while (current->next != NULL)
+		{
+			current->Follow();
+			current->CalculatePointB();
+			current->CalculateCenter();
+
+			RenderSegment(pge, current);
+
+			current = current->next;
+		}
+	}
+
+	void RenderSegment(olc::PixelGameEngine* pge, Segment* segment)
+	{
+		pge->FillCircle(segment->center, segment->radius, color);
+	}
+
+	bool DoCirclesOverlap(float x1, float y1, float r1, float x2, float y2, float r2)
+	{
+		return fabs((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)) <= (r1 + r2) * (r1 + r2);
+	}
 };
+
 
 struct Player : Creature
 {
+
+	bool eatInput = false;
+
 	Player()
 	{
 		Segment* startNode = new Segment(200, 200, 1.0, 0.0);
@@ -219,40 +293,195 @@ struct Player : Creature
 		AddFirst(startNode);
 		AddLast(secondNode);
 	}
+
+	void HandleCollision(FoodPiece& f)
+	{
+		if (DoCirclesOverlap(tail->center.x, tail->center.y, tail->radius, f.GetPosition().x, f.GetPosition().y, f.GetRadius()))
+		{
+			if (eatInput)
+			{
+				EatFood(f);
+			}
+		}
+	}
+
+	void HandlePlayerGrowth()
+	{
+		GetCurrentStageGrowthRequirement();
+
+		if (ShouldGrow())
+		{
+
+			if (currentStage == maxStage)
+			{
+				return;
+			}
+			else
+			{
+				currentStage = currentStage + 1;
+			}
+
+			UpdatePlayerLooks();
+			UpdatePlayerStats();
+
+			std::cout << "Player has grown from stage: " << currentStage - 1 << " to stage: " << currentStage << std::endl;
+
+			// Creates new segment (on the heap)
+			Segment* newSegment = new Segment(0, 0, 2, 0);
+
+			// Adjust new Segment's attributes
+			newSegment->length = head->length;
+
+			// Makes new segment  the "head" of the player so its size should always be two, "tail should always be 1
+			AddLast(newSegment);
+
+			// Adjusts head and tail relative to new changes. (aka makes tail slightly bigger, and increases head length so we can still see the 1 radius circle
+			tail->radius++;
+			head->length = tail->length;
+		}
+	}
+
+	void GetCurrentStageGrowthRequirement()
+	{
+		if (currentStage == 0)
+		{
+			currentGrowthRequirement = stage2GrowthRequirement;
+		}
+		else if (currentStage == 1)
+		{
+			currentGrowthRequirement = stage3GrowthRequirement;
+		}
+		else if (currentStage == 2)
+		{
+			currentGrowthRequirement = stage4GrowthRequirement;
+		}
+		else if (currentStage == 3)
+		{
+			currentGrowthRequirement = stage5GrowthRequirement;
+		}
+		else
+		{
+			currentGrowthRequirement = 999;
+		}
+	}
+
+	bool ShouldGrow()
+	{
+		if (currentStage == maxStage)
+			return false;
+
+		if (foodEaten >= currentGrowthRequirement)
+			return true;
+		else return false;
+	}
+
+	void UpdatePlayerStats()
+	{
+		if (plantsEaten > meatEaten)
+		{
+			herbivore = true;
+			omnivore = false;
+			carnivore = false;
+		}
+		else if (meatEaten > plantsEaten)
+		{
+			carnivore = true;
+			omnivore = false;
+			herbivore = false;
+		}
+		else
+		{
+			omnivore = true;
+			carnivore = false;
+			herbivore = false;
+		}
+	}
+
+
+	void UpdatePlayerLooks()
+	{
+
+		// TODO: Draw extra things on player based on diet, kills, etc...
+
+		if (plantsEaten > meatEaten)
+		{
+			color = olc::DARK_GREEN;
+		}
+		else if (meatEaten > plantsEaten)
+		{
+			color = olc::DARK_RED;
+		}
+		else
+		{
+			color = olc::WHITE;
+		}
+	}
+
+	// INPUT -------------------------------------------------------------- 
+
+	void HandleInput(olc::PixelGameEngine* pge, float fElapsedTime) {
+
+		if (pge->GetKey(olc::E).bPressed)
+		{
+			eatInput = true;
+		}
+		else if (pge->GetKey(olc::E).bHeld)
+		{
+			eatInput = false;
+		}
+		else if (pge->GetKey(olc::E).bReleased)
+		{
+			eatInput = false;
+		}
+
+
+		if (pge->GetKey(olc::W).bHeld)
+		{
+			followPoint.y -= moveSpeed * fElapsedTime;
+		}
+
+		if (pge->GetKey(olc::S).bHeld)
+		{
+			 followPoint.y += moveSpeed * fElapsedTime;
+		}
+
+		if (pge->GetKey(olc::A).bHeld)
+		{
+			followPoint.x -= moveSpeed * fElapsedTime;
+		}
+
+		if (pge->GetKey(olc::D).bHeld)
+		{
+			followPoint.x += moveSpeed * fElapsedTime;
+		}
+	}
+
+	// --------------------------------------------------------
+
+
 };
 
 class CellStage : public olc::PixelGameEngine
 {
-	float timer = 2.0f;
+	float timer = 1.0f;
 
 	float eatenFoodDecayTimer = 10.0f;
 
 	int maxFoodAmount = 30;
 	int currentFoodAmount = 0;
 
-	int foodEaten = 0;
-	bool eatInput = false;
-
 	float startTime = 0.0f;
-
-	float moveSpeed = 50.0f;
 
 	std::vector<FoodPiece> foodList;
 	std::vector<Creature> creatures;
 
-	olc::vf2d basePoint = { 320.0f, 320.0f };
-
 	olc::vf2d followPoint = { ScreenWidth() / 2.0f, ScreenHeight() / 2.0f};
-
-	olc::vf2d creatureFollowPoint = { ScreenWidth() / 2.0f, ScreenHeight() / 2.0f };
 
 	Player player;
 
 	Creature c1 = Creature(5);
-	Creature c2;
+	//Creature c2 = Creature(3);
 
-
-	
 public:
 	CellStage()
 	{
@@ -262,16 +491,9 @@ public:
 public:
 	bool OnUserCreate() override
 	{
-		// Main player segments
-		//Segment* startNode = new Segment(basePoint.x, basePoint.y, 1.0, 0.0);
-		//Segment* secondNode = new Segment(startNode, 2.0);
-
-		// Add segments to list
-		//player.AddFirst(startNode);
-		//player.AddLast(secondNode);
 
 		creatures.push_back(c1);
-		creatures.push_back(c2);
+		//creatures.push_back(c2);
 
 		return true;
 	}
@@ -292,10 +514,15 @@ public:
 		Clear(olc::Pixel(0, 0, 20));
 
 		// Handle player input
-		Input(fElapsedTime);
+		player.HandleInput(this, fElapsedTime);
+		player.UpdateCore(this, player.followPoint);
+		player.HandlePlayerGrowth();
+		
+		for (auto& f : foodList)
+		{
+			player.HandleCollision(f);
+		}
 
-		//UpdateCreatureCore(creatures, creatureFollowPoint);
-		UpdatePlayerCore(followPoint);
 
 		DrawString(280, 10, "cellStage", olc::WHITE, 1.0f);
 
@@ -310,178 +537,37 @@ public:
 			if (currentFoodAmount < maxFoodAmount)
 			{
 				SpawnFood(1, dist1(mt), dist2(mt));
-
 			}
 
-			UpdateCreatureCore(creatures, creatureFollowPoint);
+			for (auto& c : creatures)
+			{
+				c.SetFollowPoint(olc::vf2d(dist1(mt), dist2(mt)));
+			}
 
-			//PrintFoodList();
-
-			//std::cout << player.currentStage << std::endl;
-			
 			startTime = 0;
-		}
-
-		for (auto& f : foodList)
-		{
-			HandlePlayerCollision(f);
 		}
 
 		RenderFood();
 
-		return true;
-	}
-
-
-	// -------------------------------------------------------------------------------------------------------
-
-
-	// Draws specific segments circle
-	void RenderSegment(Segment* segment, olc::Pixel color) {
-		FillCircle(segment->center, segment->radius, color);
-	}
-
-	// Handles User Input, called before any rendering is done
-	void Input(float fElapsedTime) {
-		
-		if (GetKey(olc::E).bPressed)
+		for (auto& c : creatures)
 		{
-			eatInput = true;
-		}
-		else if (GetKey(olc::E).bHeld)
-		{
-			eatInput = false;
-		}
-		else if (GetKey(olc::E).bReleased)
-		{
-			eatInput = false;
+			c.UpdateCore(this, c.followPoint);
+			
+			for(auto& f : foodList)
+			{
+				c.HandleCollision(f);
+			}
+
 		}
 
-
-		if (GetKey(olc::W).bHeld) 
-		{
-			followPoint.y -= moveSpeed * fElapsedTime;
-		}
-
-		if (GetKey(olc::S).bHeld)
-		{
-			followPoint.y += moveSpeed * fElapsedTime;
-		}
-
-		if (GetKey(olc::A).bHeld)
-		{
-			followPoint.x -= moveSpeed * fElapsedTime;
-		}
-
-		if (GetKey(olc::D).bHeld)
-		{
-			followPoint.x += moveSpeed * fElapsedTime;
-		}
-
+		// End Program On Escape Input
 
 		if (GetKey(olc::ESCAPE).bPressed)
 		{
-
+			this->olc_Terminate();
 		}
-
-	}
-
-	void UpdateCreatureCore(std::vector<Creature> list, olc::vf2d followPoint)
-	{
-		for (auto& c : creatures)
-		{
-			std::cout << c.size << std::endl;
-		}
-	}
-
-
-	// Updates all player segments and draws them to screen
-	void UpdatePlayerCore(olc::vf2d followPoint)
-	{
-
-		player.tail->Follow(followPoint);
-		player.tail->CalculatePointB();
-		player.tail->CalculateCenter();
-
-		FillCircle(player.tail->center, player.tail->radius, player.color); 
-
-		Segment* current = player.head;
-
-		while (current->next != NULL) {
-
-			current->Follow();
-			current->CalculatePointB();
-			current->CalculateCenter();
-
-			RenderSegment(current, player.color);
-
-			current = current->next;
-		}
-
-		GetCurrentStageGrowthRequirement();
-		HandlePlayerGrowth();
-	}
-
-
-	void UpdatePlayerStats()
-	{
-		if (player.plantsEaten > player.meatEaten)
-		{
-			player.herbivore = true;
-			player.omnivore = false;
-			player.carnivore = false;
-		}
-		else if (player.meatEaten > player.plantsEaten)
-		{
-			player.carnivore = true;
-			player.omnivore = false;
-			player.herbivore = false;
-		}
-		else
-		{
-			player.omnivore = true;
-			player.carnivore = false;
-			player.herbivore = false;
-		}
-	}
-
-	void UpdatePlayerLooks()
-	{
-		
-		// TODO: Draw extra things on player based on diet, kills, etc...
-
-		if (player.plantsEaten > player.meatEaten)
-		{
-			player.color = olc::DARK_GREEN;
-		}
-		else if (player.meatEaten > player.plantsEaten)
-		{
-			player.color = olc::DARK_RED;
-		}
-		else
-		{
-			player.color = olc::WHITE;
-		}
-	}
-
-	void PrintFoodList()
-	{
-
-		std::cout << "SIZE: " << foodList.size() << std::endl;
-
-		std::string type;
-
-
-		for (auto& f : foodList)
-		{
-			if (f.GetFoodType() == 0)
-			{
-				type = "PLANT";
-			}
-			else type = "MEAT";
-
-			std::cout << f.GetID() << " : " << type << ", " << f.GetPosition() << std::endl;
-		}
+	
+		return true;
 	}
 
 	void SpawnFood(int numFood, int rnd1, int rnd2)
@@ -524,132 +610,6 @@ public:
 		// TODO: Set up collision between food objects
 	}
 
-
-	// Checks if player is currently colliding with a food object
-	void HandlePlayerCollision(FoodPiece& f)
-	{
-		// TODO: Set up collision between player and food (think about player and other entities as well)
-		if (DoCirclesOverlap(player.tail->center.x, player.tail->center.y, player.tail->radius, f.GetPosition().x, f.GetPosition().y, f.GetRadius()))
-		{
-			if (eatInput)
-			{
-				EatFood(f);
-			}
-		}
-	}
-
-	bool DoCirclesOverlap(float x1, float y1, float r1, float x2, float y2, float r2)
-	{
-		return fabs((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)) <= (r1 + r2) * (r1 + r2);
-	}
-
-	void EatFood(FoodPiece& f)
-	{
-
-		if ((player.omnivore || player.herbivore) && f.GetFoodType() == 0)
-		{
-
-			if (f.GetRadius() < 2)
-			{
-				f.SetIsEaten(true);
-				f.SetColor(olc::GREY);
-			}
-			else
-			{
-				f.SetRadius(f.GetRadius() - 1);
-			}
-
-			player.plantsEaten++;
-			player.foodEaten++;
-		}
-		
-		
-		if ((player.omnivore || player.carnivore) && f.GetFoodType() == 1)
-		{
-
-			if (f.GetRadius() < 2)
-			{
-				f.SetIsEaten(true);
-				f.SetColor(olc::GREY);
-			}
-			else
-			{
-				f.SetRadius(f.GetRadius() - 1);
-			}
-
-			player.meatEaten++;
-			player.foodEaten++;
-		}
-	}
-
-
-	void HandlePlayerGrowth()
-	{
-		if (CheckIfShouldGrow())
-		{
-
-			if (player.currentStage == player.maxStage)
-			{
-				return;
-			}
-			else
-			{
-				player.currentStage = player.currentStage + 1;
-			}
-
-			UpdatePlayerLooks();
-			UpdatePlayerStats();
-		
-			std::cout << "Player has grown from stage: " << player.currentStage - 1 << " to stage: " << player.currentStage << std::endl;
-			
-			// Creates new segment (on the heap)
-			Segment* newSegment = new Segment(0, 0, 2, 0);
-
-			// Adjust new Segment's attributes
-			newSegment->length = player.head->length;
-
-			// Makes new segment  the "head" of the player so its size should always be two, "tail should always be 1
-			player.AddLast(newSegment);
-
-			// Adjusts head and tail relative to new changes. (aka makes tail slightly bigger, and increases head length so we can still see the 1 radius circle
-			player.tail->radius++;
-			player.head->length = player.tail->length;
-		}
-	}
-
-	bool CheckIfShouldGrow()
-	{
-		if (player.currentStage == player.maxStage)
-			return false;
-
-		if (player.foodEaten >= player.currentGrowthRequirement)
-			return true;
-		else return false;
-	}
-
-	void GetCurrentStageGrowthRequirement()
-	{
-		if (player.currentStage == 0)
-		{
-			player.currentGrowthRequirement = player.stage2GrowthRequirement;
-		}
-		else if (player.currentStage == 1)
-		{
-			player.currentGrowthRequirement = player.stage3GrowthRequirement;
-		}
-		else if (player.currentStage == 2)
-		{
-			player.currentGrowthRequirement = player.stage4GrowthRequirement;
-		}
-		else if (player.currentStage == 3)
-		{
-			player.currentGrowthRequirement = player.stage5GrowthRequirement;
-		}
-		else
-		{
-			player.currentGrowthRequirement = 999;
-		}
-	}
 };
 
 // MAIN ----------------------------------------

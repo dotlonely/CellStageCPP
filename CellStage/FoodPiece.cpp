@@ -5,7 +5,7 @@ FoodPiece::FoodPiece(int x, int y)
 {
 	position = { x, y };
 
-	if (rand() % 2 == 1)
+	if (rand() % 2 == 0)
 	{
 		foodType = MEAT;
 	}
