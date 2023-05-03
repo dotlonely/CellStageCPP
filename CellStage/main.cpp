@@ -1,5 +1,6 @@
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
+#include "FoodPiece.h"
 #include <queue>
 #include <random>
 
@@ -70,7 +71,7 @@ struct Segment {
 
 };
 
-struct Worm{
+struct Creature{
 
 	enum GrowthStage
 	{
@@ -105,6 +106,17 @@ struct Worm{
 	Segment* head;
 	Segment* tail;
 	int size = 0;
+
+	Creature(){ }
+
+	Creature(int size)
+	{
+		for (int i = 0; i < size; ++i)
+		{
+			Segment* seg = new Segment(100, 100, 3, 0);
+			AddLast(seg);
+		}
+	}
 	
 
 	void AddFirst(Segment* node) 
@@ -197,78 +209,21 @@ struct Worm{
 	}
 };
 
-struct Food
+struct Player : Creature
 {
-	enum FoodType 
+	Player()
 	{
-		PLANT,
-		MEAT
-	};
+		Segment* startNode = new Segment(200, 200, 1.0, 0.0);
+		Segment* secondNode = new Segment(startNode, 2.0);
 
-
-	FoodType foodType;
-
-	olc::vi2d position;
-	olc::vf2d velocity;
-	olc::vf2d acceleration;
-
-	olc::Pixel color;
-
-	int id;
-	int nutritionalValue;
-	int radius;
-
-	float eatenDecayTimer;
-
-	bool eaten;
-	bool exists;
-
-		
-public:
-	Food(int x, int y)
-	{
-
-		position = { x, y };
-
-		if (rand() % 2 == 1)
-		{
-			foodType = MEAT;
-		}
-		else foodType = PLANT;
-
-		nutritionalValue = (rand() % 5) + 1;
-		radius = nutritionalValue;
-		eaten = false;
-
-		if (foodType == MEAT)
-		{
-			color = olc::VERY_DARK_RED;
-		}
-		else
-		{
-			color = olc::VERY_DARK_GREEN;
-		}
-
+		AddFirst(startNode);
+		AddLast(secondNode);
 	}
-
-	std::string ToString()
-	{
-		if (foodType == PLANT)
-		{
-			return "PLANT";
-		}
-		else return "MEAT";
-	}
-
-
 };
-
 
 class CellStage : public olc::PixelGameEngine
 {
-
-
-	float timer = 0.5f;
+	float timer = 2.0f;
 
 	float eatenFoodDecayTimer = 10.0f;
 
@@ -278,21 +233,24 @@ class CellStage : public olc::PixelGameEngine
 	int foodEaten = 0;
 	bool eatInput = false;
 
-
 	float startTime = 0.0f;
 
 	float moveSpeed = 50.0f;
 
-	std::vector<Food> foodList;
+	std::vector<FoodPiece> foodList;
+	std::vector<Creature> creatures;
 
 	olc::vf2d basePoint = { 320.0f, 320.0f };
 
 	olc::vf2d followPoint = { ScreenWidth() / 2.0f, ScreenHeight() / 2.0f};
 
-	Worm player;
+	olc::vf2d creatureFollowPoint = { ScreenWidth() / 2.0f, ScreenHeight() / 2.0f };
 
-	Segment* baseSegment;
-	Segment* grabSegment;
+	Player player;
+
+	Creature c1 = Creature(5);
+	Creature c2;
+
 
 	
 public:
@@ -305,20 +263,15 @@ public:
 	bool OnUserCreate() override
 	{
 		// Main player segments
-		Segment* startNode = new Segment(basePoint.x, basePoint.y, 1.0, 0.0);
-		Segment* secondNode = new Segment(startNode, 2.0);
-		//Segment* thirdNode = new Segment(secondNode, 4.0);
-		//Segment* fourthNode = new Segment(thirdNode, 5.0);
-		//Segment* fifthNode = new Segment(fourthNode, 3.0);
+		//Segment* startNode = new Segment(basePoint.x, basePoint.y, 1.0, 0.0);
+		//Segment* secondNode = new Segment(startNode, 2.0);
 
 		// Add segments to list
-		player.AddFirst(startNode);
-		player.AddLast(secondNode);
-		//player.AddLast(thirdNode);
-		//player.AddLast(fourthNode);
-		//player.AddLast(fifthNode);
+		//player.AddFirst(startNode);
+		//player.AddLast(secondNode);
 
-
+		creatures.push_back(c1);
+		creatures.push_back(c2);
 
 		return true;
 	}
@@ -341,8 +294,8 @@ public:
 		// Handle player input
 		Input(fElapsedTime);
 
-
-		UpdateCorePlayer(followPoint);
+		//UpdateCreatureCore(creatures, creatureFollowPoint);
+		UpdatePlayerCore(followPoint);
 
 		DrawString(280, 10, "cellStage", olc::WHITE, 1.0f);
 
@@ -357,11 +310,14 @@ public:
 			if (currentFoodAmount < maxFoodAmount)
 			{
 				SpawnFood(1, dist1(mt), dist2(mt));
+
 			}
 
-			PrintFoodList();
+			UpdateCreatureCore(creatures, creatureFollowPoint);
 
-			std::cout << player.currentStage << std::endl;
+			//PrintFoodList();
+
+			//std::cout << player.currentStage << std::endl;
 			
 			startTime = 0;
 		}
@@ -430,28 +386,26 @@ public:
 
 	}
 
+	void UpdateCreatureCore(std::vector<Creature> list, olc::vf2d followPoint)
+	{
+		for (auto& c : creatures)
+		{
+			std::cout << c.size << std::endl;
+		}
+	}
+
 
 	// Updates all player segments and draws them to screen
-	void UpdateCorePlayer(olc::vf2d followPoint)
+	void UpdatePlayerCore(olc::vf2d followPoint)
 	{
-		baseSegment = player.head;
-		baseSegment->prev = NULL;
-		grabSegment = player.tail;
-		grabSegment->next = NULL;
 
-		grabSegment->Follow(followPoint);
-		grabSegment->CalculatePointB();
-		grabSegment->CalculateCenter();
+		player.tail->Follow(followPoint);
+		player.tail->CalculatePointB();
+		player.tail->CalculateCenter();
 
-		FillCircle(grabSegment->center, grabSegment->radius, player.color);
+		FillCircle(player.tail->center, player.tail->radius, player.color); 
 
-		baseSegment->Follow();
-		baseSegment->CalculatePointB();
-		baseSegment->CalculateCenter();
-
-		FillCircle(baseSegment->center, baseSegment->radius, player.color);
-
-		Segment* current = baseSegment->next;
+		Segment* current = player.head;
 
 		while (current->next != NULL) {
 
@@ -466,14 +420,11 @@ public:
 
 		GetCurrentStageGrowthRequirement();
 		HandlePlayerGrowth();
-
-		
 	}
 
 
 	void UpdatePlayerStats()
 	{
-
 		if (player.plantsEaten > player.meatEaten)
 		{
 			player.herbivore = true;
@@ -492,7 +443,6 @@ public:
 			player.carnivore = false;
 			player.herbivore = false;
 		}
-	
 	}
 
 	void UpdatePlayerLooks()
@@ -524,13 +474,13 @@ public:
 
 		for (auto& f : foodList)
 		{
-			if (f.foodType == 0)
+			if (f.GetFoodType() == 0)
 			{
 				type = "PLANT";
 			}
 			else type = "MEAT";
 
-			std::cout << f.id << " : " << type << ", " << f.position << std::endl;
+			std::cout << f.GetID() << " : " << type << ", " << f.GetPosition() << std::endl;
 		}
 	}
 
@@ -539,8 +489,8 @@ public:
 		for (int i = 0; i < numFood; ++i)
 		{
 			
-			Food food = { rnd1, rnd2 };
-			food.id = foodList.size();
+			FoodPiece food = { rnd1, rnd2 };
+			food.SetID(foodList.size());
 
 			foodList.push_back(food);
 		}
@@ -548,13 +498,13 @@ public:
 		currentFoodAmount += numFood;
 	}
 
-	void CheckEatenFoodDecayed(Food& f)
+	void CheckEatenFoodDecayed(FoodPiece& f)
 	{
-		if (f.eaten)
+		if (f.IsEaten())
 		{
-			f.eatenDecayTimer += startTime;
+			f.SetEatenDecayTimer(f.GetEatenDecayTimer() + startTime);
 
-			if (f.eatenDecayTimer >= eatenFoodDecayTimer)
+			if (f.GetEatenDecayTimer()  >= eatenFoodDecayTimer)
 			{
 				// TODO: Respawn food to new location but same place in list.
 			}
@@ -565,7 +515,7 @@ public:
 	{
 		for (auto& f : foodList)
 		{
-			FillCircle(f.position, f.radius, f.color);
+			FillCircle(f.GetPosition(), f.GetRadius(), f.GetColor());
 		}
 	}
 
@@ -576,10 +526,10 @@ public:
 
 
 	// Checks if player is currently colliding with a food object
-	void HandlePlayerCollision(Food& f)
+	void HandlePlayerCollision(FoodPiece& f)
 	{
 		// TODO: Set up collision between player and food (think about player and other entities as well)
-		if (DoCirclesOverlap(player.tail->center.x, player.tail->center.y, player.tail->radius, f.position.x, f.position.y, f.radius))
+		if (DoCirclesOverlap(player.tail->center.x, player.tail->center.y, player.tail->radius, f.GetPosition().x, f.GetPosition().y, f.GetRadius()))
 		{
 			if (eatInput)
 			{
@@ -593,20 +543,20 @@ public:
 		return fabs((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2)) <= (r1 + r2) * (r1 + r2);
 	}
 
-	void EatFood(Food& f)
+	void EatFood(FoodPiece& f)
 	{
 
-		if ((player.omnivore || player.herbivore) && f.foodType == f.PLANT)
+		if ((player.omnivore || player.herbivore) && f.GetFoodType() == 0)
 		{
 
-			if (f.radius < 2)
+			if (f.GetRadius() < 2)
 			{
-				f.eaten = true;
-				f.color = olc::GREY;
+				f.SetIsEaten(true);
+				f.SetColor(olc::GREY);
 			}
 			else
 			{
-				f.radius--;
+				f.SetRadius(f.GetRadius() - 1);
 			}
 
 			player.plantsEaten++;
@@ -614,17 +564,17 @@ public:
 		}
 		
 		
-		if ((player.omnivore || player.carnivore) && f.foodType == f.MEAT)
+		if ((player.omnivore || player.carnivore) && f.GetFoodType() == 1)
 		{
 
-			if (f.radius < 2)
+			if (f.GetRadius() < 2)
 			{
-				f.eaten = true;
-				f.color = olc::GREY;
+				f.SetIsEaten(true);
+				f.SetColor(olc::GREY);
 			}
 			else
 			{
-				f.radius--;
+				f.SetRadius(f.GetRadius() - 1);
 			}
 
 			player.meatEaten++;
@@ -702,7 +652,7 @@ public:
 	}
 };
 
-
+// MAIN ----------------------------------------
 
 int main()
 {
@@ -711,3 +661,5 @@ int main()
 		demo.Start();
 	return 0;
 }
+
+// --------------------------------------------- 

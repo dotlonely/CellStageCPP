@@ -131,8 +131,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\..\..\..\OLCengine\olcPixelGameEngine.h" />
+    <ClInclude Include="FoodPiece.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="FoodPiece.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
