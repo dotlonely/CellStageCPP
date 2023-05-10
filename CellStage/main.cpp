@@ -205,24 +205,24 @@ struct Creature
 		followPoint = point;
 	}
 
-	void IncrementFollowPointX()
-	{
-		followPoint.x += 1;
-	}
-
-	void DecrementFollowPointX()
-	{
-		followPoint.x -= 1;
-	}
-
-	void IncrementFollowPointY()
+	void MoveUp()
 	{
 		followPoint.y -= 1;
 	}
 
-	void DecrementFollowPointY()
+	void MoveDown()
 	{
 		followPoint.y += 1;
+	}
+
+	void MoveLeft()
+	{
+		followPoint.x -= 1;
+	}
+
+	void MoveRight()
+	{
+		followPoint.x += 1;
 	}
 
 	void EatFood(FoodPiece& f)
@@ -562,7 +562,7 @@ public:
 
 		std::random_device rd2;
 		std::mt19937 mt2(rd2());
-		std::uniform_int_distribution<int> rndMoveDirection(0, 1);
+		std::uniform_int_distribution<int> rndMoveDirection(0, 7);
 
 		startTime += fElapsedTime;
 
@@ -598,15 +598,51 @@ public:
 			}
 
 			startTime = 0;
+
 		}
 
 		if (aiMoveTime >= .05f)
 		{
 			for (auto& c : creatures)
 			{
-				c.DecrementFollowPointY();
-				c.IncrementFollowPointX();
-				std::cout << c.tail->pointA << std::endl;
+				if (rndMoveDirection(mt2) == 0)
+				{
+					c.MoveUp();
+				}
+				else if(rndMoveDirection(mt2) == 1)
+				{
+					c.MoveDown();
+				}
+				else if (rndMoveDirection(mt2) == 2)
+				{
+					c.MoveLeft();
+				}
+				else if (rndMoveDirection(mt2) == 3)
+				{
+					c.MoveRight();
+				}
+				else if (rndMoveDirection(mt2) == 4)
+				{
+					c.MoveUp();
+					c.MoveLeft();
+				}
+				else if (rndMoveDirection(mt2) == 5)
+				{
+					c.MoveUp();
+					c.MoveRight();
+				}
+				else if (rndMoveDirection(mt2) == 6)
+				{
+					c.MoveDown();
+					c.MoveLeft();
+				}
+				else if (rndMoveDirection(mt2) == 7)
+				{
+					c.MoveUp();
+					c.MoveRight();
+				}
+
+				std::cout << rndMoveDirection(mt2) << std::endl;
 			}
 
 			aiMoveTime = 0;
