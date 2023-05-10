@@ -113,6 +113,12 @@ struct Creature
 
 	float moveSpeed = 50;
 
+	float foodDetectionRadius = 100.0f;
+
+	olc::Pixel foodDetectionColor;
+
+	std::vector<FoodPiece> detectedFood;
+
 	Creature(){ }
 
 	Creature(int size)
@@ -199,6 +205,26 @@ struct Creature
 		followPoint = point;
 	}
 
+	void IncrementFollowPointX()
+	{
+		followPoint.x += 1;
+	}
+
+	void DecrementFollowPointX()
+	{
+		followPoint.x -= 1;
+	}
+
+	void IncrementFollowPointY()
+	{
+		followPoint.y -= 1;
+	}
+
+	void DecrementFollowPointY()
+	{
+		followPoint.y += 1;
+	}
+
 	void EatFood(FoodPiece& f)
 	{
 		if ((omnivore || herbivore) && f.GetFoodType() == 0)
@@ -246,6 +272,8 @@ struct Creature
 		}
 	}
 
+
+	// Updates segments of creature
 	void UpdateCore(olc::PixelGameEngine* pge, olc::vf2d followPoint)
 	{
 		tail->Follow(followPoint);
@@ -268,9 +296,33 @@ struct Creature
 		}
 	}
 
+	// TODO: Method where we will handle all AI related tasks and call for each creature in main game loop
+	void UpdateAI()
+	{
+
+	}
+
 	void RenderSegment(olc::PixelGameEngine* pge, Segment* segment)
 	{
 		pge->FillCircle(segment->center, segment->radius, color);
+	}
+
+	void RenderDetectionRadius(olc::PixelGameEngine* pge)
+	{
+		pge->DrawCircle(tail->center, foodDetectionRadius, foodDetectionColor);
+	}
+
+	void HandleDetectingFood(FoodPiece& f)
+	{
+			
+		if (DoCirclesOverlap(tail->center.x, tail->center.y, foodDetectionRadius, f.GetPosition().x, f.GetPosition().y, f.GetRadius()))
+		{
+			foodDetectionColor = olc::GREEN;
+		}
+		else
+		{
+			foodDetectionColor = olc::YELLOW;
+		}
 	}
 
 	bool DoCirclesOverlap(float x1, float y1, float r1, float x2, float y2, float r2)
@@ -461,6 +513,7 @@ struct Player : Creature
 
 };
 
+
 class CellStage : public olc::PixelGameEngine
 {
 	float timer = 1.0f;
@@ -471,6 +524,7 @@ class CellStage : public olc::PixelGameEngine
 	int currentFoodAmount = 0;
 
 	float startTime = 0.0f;
+	float aiMoveTime = 0.0f;
 
 	std::vector<FoodPiece> foodList;
 	std::vector<Creature> creatures;
@@ -479,8 +533,7 @@ class CellStage : public olc::PixelGameEngine
 
 	Player player;
 
-	Creature c1 = Creature(5);
-	//Creature c2 = Creature(3);
+	Creature c1 = Creature(2);
 
 public:
 	CellStage()
@@ -493,7 +546,6 @@ public:
 	{
 
 		creatures.push_back(c1);
-		//creatures.push_back(c2);
 
 		return true;
 	}
@@ -508,7 +560,13 @@ public:
 		std::uniform_int_distribution<int> dist1(0, ScreenWidth());
 		std::uniform_int_distribution<int> dist2(0, ScreenHeight());
 
+		std::random_device rd2;
+		std::mt19937 mt2(rd2());
+		std::uniform_int_distribution<int> rndMoveDirection(0, 1);
+
 		startTime += fElapsedTime;
+
+		aiMoveTime += fElapsedTime; 
 
 		// Clear screen every frame
 		Clear(olc::Pixel(0, 0, 20));
@@ -539,23 +597,33 @@ public:
 				SpawnFood(1, dist1(mt), dist2(mt));
 			}
 
-			for (auto& c : creatures)
-			{
-				c.SetFollowPoint(olc::vf2d(dist1(mt), dist2(mt)));
-			}
-
 			startTime = 0;
 		}
+
+		if (aiMoveTime >= .05f)
+		{
+			for (auto& c : creatures)
+			{
+				c.DecrementFollowPointY();
+				c.IncrementFollowPointX();
+				std::cout << c.tail->pointA << std::endl;
+			}
+
+			aiMoveTime = 0;
+		}
+		
 
 		RenderFood();
 
 		for (auto& c : creatures)
 		{
 			c.UpdateCore(this, c.followPoint);
+			c.RenderDetectionRadius(this);
 			
 			for(auto& f : foodList)
 			{
 				c.HandleCollision(f);
+				c.HandleDetectingFood(f);
 			}
 
 		}
